@@ -1,5 +1,25 @@
 {
-  "itemGroup.persona": "Example Mod Tab",
-  "block.persona.example_block": "Example Block",
-  "item.persona.example_item": "Example Item"
+  "screen.persona.character_management": "Character Management",
+  "screen.persona.character_creation": "Create Character",
+  "button.persona.create_character": "Create Character",
+  "button.persona.create": "Create",
+  "button.persona.cancel": "Cancel",
+  "button.persona.delete": "Delete",
+  "gui.persona.character_name": "Enter character name...",
+  "key.persona.open_character_management": "Open Character Management",
+  "key.categories.persona": "Persona",
+  "screen.persona.character_name": "Character Name",
+  "screen.persona.create_character": "Create Character",
+  "command.persona.list": "List all characters",
+  "command.persona.switch": "Switch to a character",
+  "command.persona.create": "Create a new character",
+  "command.persona.delete": "Delete a character",
+  "command.persona.success.switch": "Switched to character %s",
+  "command.persona.success.create": "Created character %s",
+  "command.persona.success.delete": "Deleted character %s",
+  "command.persona.error.not_found": "Character %s not found",
+  "command.persona.error.already_exists": "Character %s already exists",
+  "command.persona.error.no_characters": "No characters found",
+  "command.persona.error.invalid_name": "Invalid character name",
+  "command.persona.error.deletion_disabled": "Character deletion is disabled in the config"
 }

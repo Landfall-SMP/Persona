@@ -251,4 +251,140 @@ public class CommandRegistry {
         context.getSource().sendSuccess(() -> Component.literal("Renamed character from '" + oldName + "' to '" + newName + "'"), true);
         return 1;
     }
+
+    public static void createCharacter(ServerPlayer player, String displayName) {
+        PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
+        if (characterData == null) {
+            player.sendSystemMessage(Component.literal("Error: Character data not found for player."));
+            return;
+        }
+
+        // Check character limit
+        if (characterData.getCharacters().size() >= Config.MAX_CHARACTERS_PER_PLAYER.get()) {
+            player.sendSystemMessage(Component.literal("You have reached the maximum number of characters (" + 
+                Config.MAX_CHARACTERS_PER_PLAYER.get() + ")."));
+            return;
+        }
+
+        // Check if a character with this display name already exists for the player
+        boolean nameExists = characterData.getCharacters().values().stream()
+            .anyMatch(profile -> profile.getDisplayName().equalsIgnoreCase(displayName));
+        if (nameExists) {
+            player.sendSystemMessage(Component.literal("A character with the name '" + displayName + "' already exists."));
+            return;
+        }
+
+        UUID newCharacterId = UUID.randomUUID();
+        CharacterProfile newProfile = new CharacterProfile(newCharacterId, displayName);
+        
+        characterData.addCharacter(newCharacterId, newProfile);
+        GlobalCharacterRegistry.registerCharacter(newCharacterId, player.getUUID());
+
+        // If it's the first character, set it as active
+        if (characterData.getActiveCharacterId() == null) {
+            characterData.setActiveCharacterId(newCharacterId);
+            player.sendSystemMessage(Component.literal("Character '" + displayName + "' created and set as active. UUID: " + newCharacterId));
+        } else {
+            player.sendSystemMessage(Component.literal("Character '" + displayName + "' created. UUID: " + newCharacterId));
+        }
+    }
+
+    public static void switchCharacter(ServerPlayer player, String nameOrUUID) {
+        PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
+        if (characterData == null) {
+            player.sendSystemMessage(Component.literal("Error: Character data not found for player."));
+            return;
+        }
+
+        UUID foundCharacterId = null;
+        try {
+            foundCharacterId = UUID.fromString(nameOrUUID);
+        } catch (IllegalArgumentException e) {
+            // Not a UUID, try to find by display name
+            for (CharacterProfile profile : characterData.getCharacters().values()) {
+                if (profile.getDisplayName().equalsIgnoreCase(nameOrUUID)) {
+                    foundCharacterId = profile.getId();
+                    break;
+                }
+            }
+        }
+
+        if (foundCharacterId == null) {
+            player.sendSystemMessage(Component.literal("Character '" + nameOrUUID + "' not found."));
+            return;
+        }
+
+        final UUID targetCharacterId = foundCharacterId;
+        CharacterProfile targetProfile = characterData.getCharacter(targetCharacterId);
+
+        if (targetProfile == null) {
+            player.sendSystemMessage(Component.literal("Character '" + nameOrUUID + "' not found or does not belong to you."));
+            return;
+        }
+
+        if (targetCharacterId.equals(characterData.getActiveCharacterId())) {
+            player.sendSystemMessage(Component.literal("Character '" + targetProfile.getDisplayName() + "' is already active."));
+            return;
+        }
+
+        characterData.setActiveCharacterId(targetCharacterId);
+        player.sendSystemMessage(Component.literal("Switched to character: " + targetProfile.getDisplayName()));
+    }
+
+    public static void deleteCharacter(ServerPlayer player, String nameOrUUID) {
+        // Check if character deletion is enabled
+        if (!Config.ENABLE_CHARACTER_DELETION.get()) {
+            player.sendSystemMessage(Component.literal("Character deletion is disabled on this server."));
+            return;
+        }
+
+        PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
+        if (characterData == null) {
+            player.sendSystemMessage(Component.literal("Error: Character data not found for player."));
+            return;
+        }
+
+        UUID foundCharacterId = null;
+        try {
+            foundCharacterId = UUID.fromString(nameOrUUID);
+        } catch (IllegalArgumentException e) {
+            // Not a UUID, try to find by display name
+            for (CharacterProfile profile : characterData.getCharacters().values()) {
+                if (profile.getDisplayName().equalsIgnoreCase(nameOrUUID)) {
+                    foundCharacterId = profile.getId();
+                    break;
+                }
+            }
+        }
+
+        if (foundCharacterId == null) {
+            player.sendSystemMessage(Component.literal("Character '" + nameOrUUID + "' not found."));
+            return;
+        }
+
+        CharacterProfile targetProfile = characterData.getCharacter(foundCharacterId);
+        if (targetProfile == null) {
+            player.sendSystemMessage(Component.literal("Character '" + nameOrUUID + "' not found or does not belong to you."));
+            return;
+        }
+
+        // Don't allow deleting the active character
+        if (foundCharacterId.equals(characterData.getActiveCharacterId())) {
+            player.sendSystemMessage(Component.literal("Cannot delete your active character. Switch to a different character first."));
+            return;
+        }
+
+        // Fire the delete event
+        PersonaEvents.CharacterDeleteEvent deleteEvent = new PersonaEvents.CharacterDeleteEvent(player, foundCharacterId);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(deleteEvent);
+        if (deleteEvent.isCanceled()) {
+            player.sendSystemMessage(Component.literal("Character deletion was cancelled."));
+            return;
+        }
+
+        // Remove the character
+        characterData.removeCharacter(foundCharacterId);
+        GlobalCharacterRegistry.unregisterCharacter(foundCharacterId);
+        player.sendSystemMessage(Component.literal("Character '" + targetProfile.getDisplayName() + "' has been deleted."));
+    }
 } 

@@ -2,6 +2,9 @@ package world.landfall.persona.registry;
 
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import world.landfall.persona.Persona;
 import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.data.PlayerCharacterCapability;
@@ -10,6 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+@EventBusSubscriber(modid = Persona.MODID)
 public class GlobalCharacterRegistry {
     private static final Map<UUID, UUID> characterToPlayerMap = new HashMap<>();
     
@@ -30,13 +34,20 @@ public class GlobalCharacterRegistry {
         return characterToPlayerMap.get(characterId);
     }
     
+    @SubscribeEvent
+    public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            PlayerCharacterData data = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
+            if (data != null) {
+                PersonaNetworking.sendToPlayer(data, player);
+            }
+        }
+    }
+    
     public static void syncRegistry(ServerPlayer player) {
         PlayerCharacterData data = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
         if (data != null) {
-            data.getCharacters().forEach((characterId, profile) -> 
-                registerCharacter(characterId, player.getUUID()));
-        } else {
-            Persona.LOGGER.warn("[Persona] Player {} missing character data for registry sync.", player.getName().getString());
+            PersonaNetworking.sendToPlayer(data, player);
         }
     }
     
