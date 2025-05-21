@@ -71,6 +71,7 @@ public class PersonaEvents {
     public static class CharacterDeleteEvent extends Event {
         private final Player player;
         private final UUID characterId;
+        private boolean canceled = false;
         
         public CharacterDeleteEvent(Player player, UUID characterId) {
             this.player = player;
@@ -79,6 +80,14 @@ public class PersonaEvents {
         
         public Player getPlayer() { return player; }
         public UUID getCharacterId() { return characterId; }
+        
+        public void setCanceled(boolean canceled) {
+            this.canceled = canceled;
+        }
+        
+        public boolean isCanceled() {
+            return this.canceled;
+        }
     }
     
     @SubscribeEvent

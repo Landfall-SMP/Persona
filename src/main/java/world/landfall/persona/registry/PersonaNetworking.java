@@ -71,17 +71,21 @@ public class PersonaNetworking {
         public static class Handler {
             public static void handleClientPacket(final SyncCharacterDataPayload payload, final IPayloadContext context) {
                 Optional.ofNullable(context.player()).ifPresent(player -> {
-                    player.getData(PlayerCharacterCapability.CHARACTER_DATA)
-                        .copyFrom(payload.data());
+                    PlayerCharacterData currentData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
+                    if (currentData != null) {
+                        currentData.setActiveCharacterId(payload.data().getActiveCharacterId());
+                    }
                 });
             }
         
             public static void handleServerPacket(final SyncCharacterDataPayload payload, final IPayloadContext context) {
                 Optional.ofNullable(context.player()).ifPresent(player -> {
                     if (player instanceof ServerPlayer serverPlayer) {
-                        serverPlayer.getData(PlayerCharacterCapability.CHARACTER_DATA)
-                            .copyFrom(payload.data());
-                        GlobalCharacterRegistry.syncRegistry(serverPlayer);
+                        PlayerCharacterData currentData = serverPlayer.getData(PlayerCharacterCapability.CHARACTER_DATA);
+                        if (currentData != null) {
+                            currentData.setActiveCharacterId(payload.data().getActiveCharacterId());
+                            GlobalCharacterRegistry.syncRegistry(serverPlayer);
+                        }
                     }
                 });
             }

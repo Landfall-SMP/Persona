@@ -8,7 +8,6 @@ public class Config {
 
     public static final ModConfigSpec.IntValue MAX_CHARACTERS_PER_PLAYER;
     public static final ModConfigSpec.BooleanValue ENABLE_CHARACTER_DELETION;
-    public static final ModConfigSpec.BooleanValue SYNC_CHARACTER_NAMES;
 
     static {
         BUILDER.push("General Settings");
@@ -20,10 +19,6 @@ public class Config {
         ENABLE_CHARACTER_DELETION = BUILDER
             .comment("Whether players can delete their characters")
             .define("enableCharacterDeletion", true);
-            
-        SYNC_CHARACTER_NAMES = BUILDER
-            .comment("Whether to sync character display names across the server")
-            .define("syncCharacterNames", true);
             
         BUILDER.pop();
         
