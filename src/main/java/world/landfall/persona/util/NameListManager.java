@@ -1,6 +1,5 @@
 package world.landfall.persona.util;
 
-import net.minecraft.server.MinecraftServer;
 import net.neoforged.fml.loading.FMLPaths;
 import org.apache.commons.io.FileUtils;
 
