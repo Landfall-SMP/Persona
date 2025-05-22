@@ -159,12 +159,27 @@ public class CommandRegistry {
             return 0;
         }
 
-        if (targetCharacterId.equals(characterData.getActiveCharacterId())){
+        UUID oldActiveCharacterId = characterData.getActiveCharacterId(); // Get the old active ID *before* changing it
+
+        if (targetCharacterId.equals(oldActiveCharacterId)){
             sendError(player, Component.translatable("command.persona.error.already_active", targetProfile.getDisplayName()), false);
             return 0;
         }
 
-        characterData.setActiveCharacterId(targetCharacterId);
+        // Update active character ID in data
+        characterData.setActiveCharacterId(targetCharacterId); 
+
+        // Post the event
+        Persona.LOGGER.info("[Persona] Posting CharacterSwitchEvent for player: {}, from: {}, to: {}", 
+            player.getName().getString(), 
+            (oldActiveCharacterId != null ? oldActiveCharacterId.toString() : "null"), 
+            targetCharacterId.toString());
+            
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
+            new world.landfall.persona.registry.PersonaEvents.CharacterSwitchEvent(player, oldActiveCharacterId, targetCharacterId)
+        );
+        Persona.LOGGER.info("[Persona] CharacterSwitchEvent was posted.");
+
         sendSuccess(player, Component.translatable("command.persona.success.switch", targetProfile.getDisplayName()), false);
         return 1;
     }
@@ -609,12 +624,28 @@ public class CommandRegistry {
             return;
         }
 
-        if (targetCharacterId.equals(characterData.getActiveCharacterId())){
+        UUID oldActiveCharacterId = characterData.getActiveCharacterId(); // Get the old active ID *before* changing it
+
+        if (targetCharacterId.equals(oldActiveCharacterId)){
             sendError(player, Component.translatable("command.persona.error.already_active", targetProfile.getDisplayName()), fromGui);
             return;
         }
 
+        // Update active character ID in data
         characterData.setActiveCharacterId(targetCharacterId);
+
+        // Post the event
+        Persona.LOGGER.info("[Persona] Posting CharacterSwitchEvent (fromGui={}) for player: {}, from: {}, to: {}", 
+            fromGui,
+            player.getName().getString(), 
+            (oldActiveCharacterId != null ? oldActiveCharacterId.toString() : "null"), 
+            targetCharacterId.toString());
+            
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
+            new world.landfall.persona.registry.PersonaEvents.CharacterSwitchEvent(player, oldActiveCharacterId, targetCharacterId)
+        );
+        Persona.LOGGER.info("[Persona] CharacterSwitchEvent was posted (fromGui={}).", fromGui);
+
         sendSuccess(player, Component.translatable("command.persona.success.switch", targetProfile.getDisplayName()), fromGui);
     }
 
