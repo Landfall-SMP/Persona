@@ -14,12 +14,24 @@ import world.landfall.persona.data.PlayerCharacterCapability;
 import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.data.CharacterProfile;
 import world.landfall.persona.registry.GlobalCharacterRegistry;
-import world.landfall.persona.registry.PersonaEvents;
 import world.landfall.persona.registry.PersonaNetworking;
 
 import java.util.UUID;
+import java.util.Optional;
 
 public class CommandRegistry {
+
+    private static void sendError(ServerPlayer player, Component message, boolean fromGui) {
+        if (!fromGui) {
+            player.sendSystemMessage(message.copy().withStyle(style -> style.withColor(0xFF0000)));
+        }
+    }
+
+    private static void sendSuccess(ServerPlayer player, Component message, boolean fromGui) {
+        if (!fromGui) {
+            player.sendSystemMessage(message);
+        }
+    }
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal(Persona.MODID)
@@ -46,40 +58,46 @@ public class CommandRegistry {
 
         PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
         if (characterData == null) {
-            context.getSource().sendFailure(Component.literal("Error: Character data not found for player."));
+            sendError(player, Component.translatable("command.persona.error.data_not_found"), false);
             return 0;
         }
 
         // Check character limit
         if (characterData.getCharacters().size() >= Config.MAX_CHARACTERS_PER_PLAYER.get()) {
-            context.getSource().sendFailure(Component.literal("You have reached the maximum number of characters (" + 
-                Config.MAX_CHARACTERS_PER_PLAYER.get() + ")."));
+            sendError(player, Component.translatable("command.persona.error.char_limit_exceeded", 
+                Config.MAX_CHARACTERS_PER_PLAYER.get()), false);
             return 0;
         }
 
-        // Check if a character with this display name already exists for the player
-        boolean nameExists = characterData.getCharacters().values().stream()
-            .anyMatch(profile -> profile.getDisplayName().equalsIgnoreCase(displayName));
-        if (nameExists) {
-            context.getSource().sendFailure(Component.literal("A character with the name '" + displayName + "' already exists."));
+        // Check if name is taken globally
+        if (GlobalCharacterRegistry.isNameTaken(displayName)) {
+            Optional<UUID> existingCharId = GlobalCharacterRegistry.getCharacterIdByName(displayName);
+            Optional<UUID> ownerUUID = existingCharId.flatMap(GlobalCharacterRegistry::getPlayerForCharacter);
+            
+            String errorKey = ownerUUID.isPresent() && ownerUUID.get().equals(player.getUUID()) ?
+                "command.persona.error.name_taken_self" : "command.persona.error.name_taken_other";
+            sendError(player, Component.translatable(errorKey, displayName), false);
             return 0;
         }
 
         UUID newCharacterId = UUID.randomUUID();
-        CharacterProfile newProfile = new CharacterProfile(newCharacterId, displayName);
-        
-        characterData.addCharacter(newCharacterId, newProfile);
-        GlobalCharacterRegistry.registerCharacter(newCharacterId, player.getUUID());
+        try {
+            CharacterProfile newProfile = new CharacterProfile(newCharacterId, displayName);
+            characterData.addCharacter(newCharacterId, newProfile);
+            GlobalCharacterRegistry.registerCharacter(newCharacterId, player.getUUID(), displayName);
 
-        // If it's the first character, set it as active
-        if (characterData.getActiveCharacterId() == null) {
-            characterData.setActiveCharacterId(newCharacterId);
-            context.getSource().sendSuccess(() -> Component.literal("Character '" + displayName + "' created and set as active. UUID: " + newCharacterId), true);
-        } else {
-            context.getSource().sendSuccess(() -> Component.literal("Character '" + displayName + "' created. UUID: " + newCharacterId), true);
+            // If it's the first character, set it as active
+            if (characterData.getActiveCharacterId() == null) {
+                characterData.setActiveCharacterId(newCharacterId);
+                sendSuccess(player, Component.translatable("command.persona.success.create_set_active", displayName, newCharacterId.toString()), false);
+            } else {
+                sendSuccess(player, Component.translatable("command.persona.success.create", displayName, newCharacterId.toString()), false);
+            }
+            return 1;
+        } catch (IllegalArgumentException e) {
+            sendError(player, Component.translatable("command.persona.error.invalid_name"), false);
+            return 0;
         }
-        
-        return 1;
     }
 
     private static int switchCharacter(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
@@ -88,7 +106,7 @@ public class CommandRegistry {
 
         PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
         if (characterData == null) {
-            context.getSource().sendFailure(Component.literal("Error: Character data not found for player."));
+            sendError(player, Component.translatable("command.persona.error.data_not_found"), false);
             return 0;
         }
 
@@ -106,25 +124,25 @@ public class CommandRegistry {
         }
 
         if (foundCharacterId == null) {
-            context.getSource().sendFailure(Component.literal("Character '" + nameOrUUID + "' not found."));
+            sendError(player, Component.translatable("command.persona.error.not_found", nameOrUUID), false);
             return 0;
         }
 
         final UUID targetCharacterId = foundCharacterId; // Make it effectively final for lambda
         CharacterProfile targetProfile = characterData.getCharacter(targetCharacterId);
 
-        if (targetProfile == null) { // Shouldnt happen if foundCharacterId was set from existing characters
-            context.getSource().sendFailure(Component.literal("Character '" + nameOrUUID + "' not found or does not belong to you."));
+        if (targetProfile == null) { 
+            sendError(player, Component.translatable("command.persona.error.char_not_found_or_not_yours", nameOrUUID), false);
             return 0;
         }
 
         if (targetCharacterId.equals(characterData.getActiveCharacterId())){
-            context.getSource().sendFailure(Component.literal("Character '" + targetProfile.getDisplayName() + "' is already active."));
+            sendError(player, Component.translatable("command.persona.error.already_active", targetProfile.getDisplayName()), false);
             return 0;
         }
 
         characterData.setActiveCharacterId(targetCharacterId);
-        context.getSource().sendSuccess(() -> Component.literal("Switched to character: " + targetProfile.getDisplayName()), true);
+        sendSuccess(player, Component.translatable("command.persona.success.switch", targetProfile.getDisplayName()), false);
         return 1;
     }
 
@@ -133,15 +151,15 @@ public class CommandRegistry {
         PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
 
         if (characterData == null || characterData.getCharacters().isEmpty()) {
-            context.getSource().sendSuccess(() -> Component.literal("You have no characters."), false);
+            context.getSource().sendSuccess(() -> Component.translatable("command.persona.error.no_characters"), false);
             return 1;
         }
 
-        StringBuilder sb = new StringBuilder("Your characters:\n");
+        StringBuilder sb = new StringBuilder(Component.translatable("command.persona.list.header").getString() + "\n");
         characterData.getCharacters().forEach((uuid, profile) -> {
             sb.append("- ").append(profile.getDisplayName()).append(" (UUID: ").append(uuid).append(")");
             if (uuid.equals(characterData.getActiveCharacterId())) {
-                sb.append(" [ACTIVE]");
+                sb.append(" ").append(Component.translatable("command.persona.list.active_suffix").getString());
             }
             sb.append("\n");
         });
@@ -156,13 +174,13 @@ public class CommandRegistry {
 
         // Check if character deletion is enabled
         if (!Config.ENABLE_CHARACTER_DELETION.get()) {
-            context.getSource().sendFailure(Component.literal("Character deletion is disabled on this server."));
+            sendError(player, Component.translatable("command.persona.error.deletion_disabled"), false);
             return 0;
         }
 
         PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
         if (characterData == null) {
-            context.getSource().sendFailure(Component.literal("Error: Character data not found for player."));
+            sendError(player, Component.translatable("command.persona.error.data_not_found"), false);
             return 0;
         }
 
@@ -170,7 +188,6 @@ public class CommandRegistry {
         try {
             foundCharacterId = UUID.fromString(nameOrUUID);
         } catch (IllegalArgumentException e) {
-            // Not a UUID, try to find by display name
             for (CharacterProfile profile : characterData.getCharacters().values()) {
                 if (profile.getDisplayName().equalsIgnoreCase(nameOrUUID)) {
                     foundCharacterId = profile.getId();
@@ -180,34 +197,26 @@ public class CommandRegistry {
         }
 
         if (foundCharacterId == null) {
-            context.getSource().sendFailure(Component.literal("Character '" + nameOrUUID + "' not found."));
+            sendError(player, Component.translatable("command.persona.error.not_found", nameOrUUID), false);
             return 0;
         }
 
         CharacterProfile targetProfile = characterData.getCharacter(foundCharacterId);
         if (targetProfile == null) {
-            context.getSource().sendFailure(Component.literal("Character '" + nameOrUUID + "' not found or does not belong to you."));
+            sendError(player, Component.translatable("command.persona.error.char_not_found_or_not_yours", nameOrUUID), false);
             return 0;
         }
 
-        // Don't allow deleting the active character
+        // Check if trying to delete active character
         if (foundCharacterId.equals(characterData.getActiveCharacterId())) {
-            context.getSource().sendFailure(Component.literal("Cannot delete your active character. Switch to a different character first."));
+            sendError(player, Component.translatable("command.persona.error.delete_active"), false);
             return 0;
         }
 
-        // Fire the delete event
-        PersonaEvents.CharacterDeleteEvent deleteEvent = new PersonaEvents.CharacterDeleteEvent(player, foundCharacterId);
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(deleteEvent);
-        if (deleteEvent.isCanceled()) {
-            context.getSource().sendFailure(Component.literal("Character deletion was cancelled."));
-            return 0;
-        }
-
-        // Remove the character
+        String characterName = targetProfile.getDisplayName();
         characterData.removeCharacter(foundCharacterId);
-        GlobalCharacterRegistry.unregisterCharacter(foundCharacterId);
-        context.getSource().sendSuccess(() -> Component.literal("Character '" + targetProfile.getDisplayName() + "' has been deleted."), true);
+        GlobalCharacterRegistry.unregisterCharacter(foundCharacterId, characterName);
+        sendSuccess(player, Component.translatable("command.persona.success.delete", targetProfile.getDisplayName()), false);
         return 1;
     }
 
@@ -217,82 +226,133 @@ public class CommandRegistry {
 
         PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
         if (characterData == null) {
-            context.getSource().sendFailure(Component.literal("Error: Character data not found for player."));
+            sendError(player, Component.translatable("command.persona.error.data_not_found"), false);
             return 0;
         }
 
         UUID activeCharacterId = characterData.getActiveCharacterId();
         if (activeCharacterId == null) {
-            context.getSource().sendFailure(Component.literal("You don't have an active character."));
+            sendError(player, Component.translatable("command.persona.error.no_active_char"), false);
             return 0;
         }
 
         CharacterProfile activeProfile = characterData.getCharacter(activeCharacterId);
-        if (activeProfile == null) {
-            context.getSource().sendFailure(Component.literal("Error: Active character not found."));
+        if (activeProfile == null) { // Should technically not happen if activeCharacterId is not null
+            sendError(player, Component.translatable("command.persona.error.active_char_not_found"), false);
             return 0;
         }
 
-        // Check if the new name is already taken by another character
-        boolean nameExists = characterData.getCharacters().values().stream()
-            .anyMatch(profile -> profile.getDisplayName().equalsIgnoreCase(newName) && 
-                              !profile.getId().equals(activeCharacterId));
-        if (nameExists) {
-            context.getSource().sendFailure(Component.literal("A character with the name '" + newName + "' already exists."));
+        // Validate new name format
+        if (!CharacterProfile.isValidName(newName)) {
+            sendError(player, Component.translatable("command.persona.error.invalid_name"), false);
+            return 0;
+        }
+
+        // Check if new name is taken globally, unless it's the same as current active character (case-insensitive)
+        if (!newName.equalsIgnoreCase(activeProfile.getDisplayName()) && GlobalCharacterRegistry.isNameTaken(newName)) {
+            Optional<UUID> existingCharId = GlobalCharacterRegistry.getCharacterIdByName(newName);
+            Optional<UUID> ownerUUID = existingCharId.flatMap(GlobalCharacterRegistry::getPlayerForCharacter);
+            
+            String errorKey = ownerUUID.isPresent() && ownerUUID.get().equals(player.getUUID()) ?
+                "command.persona.error.name_taken_self" : "command.persona.error.name_taken_other";
+            sendError(player, Component.translatable(errorKey, newName), false);
             return 0;
         }
 
         String oldName = activeProfile.getDisplayName();
+        GlobalCharacterRegistry.unregisterCharacter(activeCharacterId, oldName);
         activeProfile.setDisplayName(newName);
-
-        // Sync the change to other players
-        PersonaNetworking.sendToServer(characterData);
-
-        context.getSource().sendSuccess(() -> Component.literal("Renamed character from '" + oldName + "' to '" + newName + "'"), true);
+        GlobalCharacterRegistry.registerCharacter(activeCharacterId, player.getUUID(), newName);
+        
+        sendSuccess(player, Component.translatable("command.persona.success.renamed", newName), false);
         return 1;
     }
 
     public static void createCharacter(ServerPlayer player, String displayName) {
+        createCharacter(player, displayName, false);
+    }
+
+    public static void createCharacter(ServerPlayer player, String displayName, boolean fromGui) {
         PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
         if (characterData == null) {
-            player.sendSystemMessage(Component.literal("Error: Character data not found for player."));
+            if (fromGui) {
+                PersonaNetworking.sendCreationResponseToPlayer(player, false, "command.persona.error.data_not_found");
+            } else {
+                sendError(player, Component.translatable("command.persona.error.data_not_found"), false);
+            }
             return;
         }
 
         // Check character limit
         if (characterData.getCharacters().size() >= Config.MAX_CHARACTERS_PER_PLAYER.get()) {
-            player.sendSystemMessage(Component.literal("You have reached the maximum number of characters (" + 
-                Config.MAX_CHARACTERS_PER_PLAYER.get() + ")."));
+            if (fromGui) {
+                PersonaNetworking.sendCreationResponseToPlayer(player, false, "command.persona.error.char_limit_exceeded", 
+                    String.valueOf(Config.MAX_CHARACTERS_PER_PLAYER.get()));
+            } else {
+                sendError(player, Component.translatable("command.persona.error.char_limit_exceeded", 
+                    Config.MAX_CHARACTERS_PER_PLAYER.get()), false);
+            }
             return;
         }
 
-        // Check if a character with this display name already exists for the player
-        boolean nameExists = characterData.getCharacters().values().stream()
-            .anyMatch(profile -> profile.getDisplayName().equalsIgnoreCase(displayName));
-        if (nameExists) {
-            player.sendSystemMessage(Component.literal("A character with the name '" + displayName + "' already exists."));
+        // Validate name format (implicitly done by CharacterProfile constructor)
+        // but also check if name is taken globally
+        String normalizedName = displayName.toLowerCase(); // Normalize for checking
+        if (GlobalCharacterRegistry.isNameTaken(normalizedName)) {
+            Optional<UUID> existingCharId = GlobalCharacterRegistry.getCharacterIdByName(normalizedName);
+            Optional<UUID> ownerUUID = existingCharId.flatMap(GlobalCharacterRegistry::getPlayerForCharacter);
+            
+            String errorKey = ownerUUID.isPresent() && ownerUUID.get().equals(player.getUUID()) ?
+                "command.persona.error.name_taken_self" : "command.persona.error.name_taken_other";
+            
+            if (fromGui) {
+                PersonaNetworking.sendCreationResponseToPlayer(player, false, errorKey, displayName);
+            } else {
+                sendError(player, Component.translatable(errorKey, displayName), false);
+            }
             return;
         }
 
         UUID newCharacterId = UUID.randomUUID();
-        CharacterProfile newProfile = new CharacterProfile(newCharacterId, displayName);
-        
-        characterData.addCharacter(newCharacterId, newProfile);
-        GlobalCharacterRegistry.registerCharacter(newCharacterId, player.getUUID());
+        try {
+            CharacterProfile newProfile = new CharacterProfile(newCharacterId, displayName);
+            // If the constructor throws IllegalArgumentException (e.g. invalid name), it's caught below
 
-        // If it's the first character, set it as active
-        if (characterData.getActiveCharacterId() == null) {
-            characterData.setActiveCharacterId(newCharacterId);
-            player.sendSystemMessage(Component.literal("Character '" + displayName + "' created and set as active. UUID: " + newCharacterId));
-        } else {
-            player.sendSystemMessage(Component.literal("Character '" + displayName + "' created. UUID: " + newCharacterId));
+            characterData.addCharacter(newCharacterId, newProfile);
+            GlobalCharacterRegistry.registerCharacter(newCharacterId, player.getUUID(), displayName);
+
+            String successKey;
+            if (characterData.getActiveCharacterId() == null) {
+                characterData.setActiveCharacterId(newCharacterId);
+                successKey = "command.persona.success.create_set_active";
+            } else {
+                successKey = "command.persona.success.create";
+            }
+            
+            if (fromGui) {
+                PersonaNetworking.sendCreationResponseToPlayer(player, true, successKey, displayName, newCharacterId.toString());
+            } else {
+                sendSuccess(player, Component.translatable(successKey, displayName, newCharacterId.toString()), false);
+            }
+
+        } catch (IllegalArgumentException e) {
+            // This catches errors from CharacterProfile constructor (e.g. invalid name)
+            if (fromGui) {
+                PersonaNetworking.sendCreationResponseToPlayer(player, false, "command.persona.error.invalid_name");
+            } else {
+                sendError(player, Component.translatable("command.persona.error.invalid_name"), false);
+            }
         }
     }
 
     public static void switchCharacter(ServerPlayer player, String nameOrUUID) {
+        switchCharacter(player, nameOrUUID, false);
+    }
+
+    public static void switchCharacter(ServerPlayer player, String nameOrUUID, boolean fromGui) {
         PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
         if (characterData == null) {
-            player.sendSystemMessage(Component.literal("Error: Character data not found for player."));
+            sendError(player, Component.translatable("command.persona.error.data_not_found"), fromGui);
             return;
         }
 
@@ -310,37 +370,41 @@ public class CommandRegistry {
         }
 
         if (foundCharacterId == null) {
-            player.sendSystemMessage(Component.literal("Character '" + nameOrUUID + "' not found."));
+            sendError(player, Component.translatable("command.persona.error.not_found", nameOrUUID), fromGui);
             return;
         }
 
-        final UUID targetCharacterId = foundCharacterId;
+        final UUID targetCharacterId = foundCharacterId; // Make it effectively final for lambda
         CharacterProfile targetProfile = characterData.getCharacter(targetCharacterId);
 
-        if (targetProfile == null) {
-            player.sendSystemMessage(Component.literal("Character '" + nameOrUUID + "' not found or does not belong to you."));
+        if (targetProfile == null) { // Shouldnt happen if foundCharacterId was set from existing characters
+            sendError(player, Component.translatable("command.persona.error.char_not_found_or_not_yours", nameOrUUID), fromGui);
             return;
         }
 
-        if (targetCharacterId.equals(characterData.getActiveCharacterId())) {
-            player.sendSystemMessage(Component.literal("Character '" + targetProfile.getDisplayName() + "' is already active."));
+        if (targetCharacterId.equals(characterData.getActiveCharacterId())){
+            sendError(player, Component.translatable("command.persona.error.already_active", targetProfile.getDisplayName()), fromGui);
             return;
         }
 
         characterData.setActiveCharacterId(targetCharacterId);
-        player.sendSystemMessage(Component.literal("Switched to character: " + targetProfile.getDisplayName()));
+        sendSuccess(player, Component.translatable("command.persona.success.switch", targetProfile.getDisplayName()), fromGui);
     }
 
     public static void deleteCharacter(ServerPlayer player, String nameOrUUID) {
+        deleteCharacter(player, nameOrUUID, false);
+    }
+
+    public static void deleteCharacter(ServerPlayer player, String nameOrUUID, boolean fromGui) {
         // Check if character deletion is enabled
         if (!Config.ENABLE_CHARACTER_DELETION.get()) {
-            player.sendSystemMessage(Component.literal("Character deletion is disabled on this server."));
+            sendError(player, Component.translatable("command.persona.error.deletion_disabled"), fromGui);
             return;
         }
 
         PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
         if (characterData == null) {
-            player.sendSystemMessage(Component.literal("Error: Character data not found for player."));
+            sendError(player, Component.translatable("command.persona.error.data_not_found"), fromGui);
             return;
         }
 
@@ -358,33 +422,67 @@ public class CommandRegistry {
         }
 
         if (foundCharacterId == null) {
-            player.sendSystemMessage(Component.literal("Character '" + nameOrUUID + "' not found."));
+            sendError(player, Component.translatable("command.persona.error.not_found", nameOrUUID), fromGui);
             return;
         }
 
         CharacterProfile targetProfile = characterData.getCharacter(foundCharacterId);
         if (targetProfile == null) {
-            player.sendSystemMessage(Component.literal("Character '" + nameOrUUID + "' not found or does not belong to you."));
+            sendError(player, Component.translatable("command.persona.error.char_not_found_or_not_yours", nameOrUUID), fromGui);
             return;
         }
 
-        // Don't allow deleting the active character
+        // Check if trying to delete active character
         if (foundCharacterId.equals(characterData.getActiveCharacterId())) {
-            player.sendSystemMessage(Component.literal("Cannot delete your active character. Switch to a different character first."));
+            sendError(player, Component.translatable("command.persona.error.delete_active"), fromGui);
             return;
         }
 
-        // Fire the delete event
-        PersonaEvents.CharacterDeleteEvent deleteEvent = new PersonaEvents.CharacterDeleteEvent(player, foundCharacterId);
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(deleteEvent);
-        if (deleteEvent.isCanceled()) {
-            player.sendSystemMessage(Component.literal("Character deletion was cancelled."));
-            return;
-        }
-
-        // Remove the character
+        String characterName = targetProfile.getDisplayName();
         characterData.removeCharacter(foundCharacterId);
-        GlobalCharacterRegistry.unregisterCharacter(foundCharacterId);
-        player.sendSystemMessage(Component.literal("Character '" + targetProfile.getDisplayName() + "' has been deleted."));
+        GlobalCharacterRegistry.unregisterCharacter(foundCharacterId, characterName);
+        sendSuccess(player, Component.translatable("command.persona.success.delete", targetProfile.getDisplayName()), fromGui);
+    }
+
+    public static void renameCharacter(ServerPlayer player, String newName, boolean fromGui) {
+        PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
+        if (characterData == null) {
+            sendError(player, Component.translatable("command.persona.error.data_not_found"), fromGui);
+            return;
+        }
+
+        UUID activeCharacterId = characterData.getActiveCharacterId();
+        if (activeCharacterId == null) {
+            sendError(player, Component.translatable("command.persona.error.no_active_char"), fromGui);
+            return;
+        }
+
+        CharacterProfile activeProfile = characterData.getCharacter(activeCharacterId);
+        if (activeProfile == null) {
+            sendError(player, Component.translatable("command.persona.error.active_char_not_found"), fromGui);
+            return;
+        }
+
+        if (!CharacterProfile.isValidName(newName)) {
+            sendError(player, Component.translatable("command.persona.error.invalid_name"), fromGui);
+            return;
+        }
+
+        if (!newName.equalsIgnoreCase(activeProfile.getDisplayName()) && GlobalCharacterRegistry.isNameTaken(newName)) {
+            Optional<UUID> existingCharId = GlobalCharacterRegistry.getCharacterIdByName(newName);
+            Optional<UUID> ownerUUID = existingCharId.flatMap(GlobalCharacterRegistry::getPlayerForCharacter);
+            
+            String errorKey = ownerUUID.isPresent() && ownerUUID.get().equals(player.getUUID()) ?
+                "command.persona.error.name_taken_self" : "command.persona.error.name_taken_other";
+            sendError(player, Component.translatable(errorKey, newName), fromGui);
+            return;
+        }
+
+        String oldName = activeProfile.getDisplayName();
+        GlobalCharacterRegistry.unregisterCharacter(activeCharacterId, oldName);
+        activeProfile.setDisplayName(newName);
+        GlobalCharacterRegistry.registerCharacter(activeCharacterId, player.getUUID(), newName);
+        
+        sendSuccess(player, Component.translatable("command.persona.success.renamed", newName), fromGui);
     }
 } 

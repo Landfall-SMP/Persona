@@ -5,7 +5,15 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import world.landfall.persona.data.CharacterProfile;
+import world.landfall.persona.data.PlayerCharacterCapability;
+import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.registry.PersonaNetworking;
+import world.landfall.persona.client.network.CharacterSyncManager;
+
+import java.util.Objects;
+import java.util.Optional;
+import javax.annotation.Nonnull;
 
 public class CharacterCreationScreen extends Screen {
     private static final int WIDTH = 200;
@@ -14,10 +22,13 @@ public class CharacterCreationScreen extends Screen {
     
     private final Screen parent;
     private EditBox nameBox;
+    private Button createButton;
+    private final CharacterSyncManager syncManager;
     
     public CharacterCreationScreen(Screen parent) {
         super(Component.translatable("screen.persona.create_character"));
-        this.parent = parent;
+        this.parent = Objects.requireNonNull(parent, "Parent screen cannot be null");
+        this.syncManager = new CharacterSyncManager(this::handleSyncComplete);
     }
     
     @Override
@@ -31,37 +42,88 @@ public class CharacterCreationScreen extends Screen {
         nameBox.setValue("");
         addRenderableWidget(nameBox);
         
-        Button createButton = Button.builder(Component.translatable("button.persona.create"), button -> 
+        createButton = Button.builder(Component.translatable("button.persona.create"), button -> 
             createCharacter()
         ).bounds(guiLeft + PADDING, guiTop + HEIGHT - 30, (WIDTH - (PADDING * 3)) / 2, 20).build();
         addRenderableWidget(createButton);
         
-        Button cancelButton = Button.builder(Component.translatable("button.persona.cancel"), button -> {
-            if (minecraft != null) {
-                minecraft.setScreen(parent);
-            }
-        }).bounds(guiLeft + WIDTH - ((WIDTH - (PADDING * 3)) / 2) - PADDING, guiTop + HEIGHT - 30, 
+        Button cancelButton = Button.builder(Component.translatable("button.persona.cancel"), button -> 
+            handleCancel()
+        ).bounds(guiLeft + WIDTH - ((WIDTH - (PADDING * 3)) / 2) - PADDING, guiTop + HEIGHT - 30, 
                 (WIDTH - (PADDING * 3)) / 2, 20).build();
         addRenderableWidget(cancelButton);
     }
     
     @SuppressWarnings("null")
+    private void handleCancel() {
+        if (minecraft == null) return;
+        
+        if (parent instanceof CharacterManagementScreen) {
+            Optional<PlayerCharacterData> data = Optional.ofNullable(minecraft.player)
+                .map(player -> player.getData(PlayerCharacterCapability.CHARACTER_DATA));
+            
+            if (data.map(d -> d.getCharacters().isEmpty()).orElse(false)) {
+                minecraft.setScreen(null);
+                return;
+            }
+        }
+        minecraft.setScreen(parent);
+    }
+    
+    @Override
+    public void tick() {
+        super.tick();
+        if (syncManager.isSyncing()) {
+            createButton.active = false;  // Disable button while syncing
+        }
+        syncManager.tick();
+    }
+    
     private void createCharacter() {
         String name = nameBox.getValue().trim();
-        if (!name.isEmpty() && minecraft != null) {
-            PersonaNetworking.sendActionToServer(PersonaNetworking.Action.CREATE, name);
-            PersonaNetworking.requestCharacterSync();
-            minecraft.setScreen(parent);
+        if (name.isEmpty()) {
+            UIErrorHandler.showError("gui.persona.error.name_empty");
+            return;
+        }
+
+        // Validate name format before sending to server
+        if (!CharacterProfile.isValidName(name)) {
+            UIErrorHandler.showError("command.persona.error.invalid_name");
+            return;
+        }
+
+        // Disable button while waiting for server response
+        createButton.active = false;
+        PersonaNetworking.sendActionToServer(PersonaNetworking.Action.CREATE, name, true);
+    }
+    
+    // Called by PersonaNetworking when server confirms successful creation
+    public void handleSuccessfulCreation() {
+        syncManager.startSync();
+    }
+
+    // Called by PersonaNetworking when server reports creation failure
+    public void handleFailedCreation(String errorKey, Object... args) {
+        createButton.active = true;
+        UIErrorHandler.showError(errorKey, args);
+    }
+    
+    @SuppressWarnings("null")
+    private void handleSyncComplete(boolean success) {
+        if (minecraft != null) {
+            if (!success) {
+                createButton.active = true;
+                UIErrorHandler.showError("gui.persona.error.sync_failed");
+            } else {
+                minecraft.setScreen(parent);
+            }
         }
     }
     
     @Override
-    public void renderBackground(@SuppressWarnings("null") GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        super.renderBackground(graphics, mouseX, mouseY, partialTick);
-    }
-    
-    @Override
-    public void render(@SuppressWarnings("null") GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void render(@Nonnull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        Objects.requireNonNull(graphics, "GuiGraphics cannot be null");
+        
         renderBackground(graphics, mouseX, mouseY, partialTick);
         
         int guiLeft = (width - WIDTH) / 2;
@@ -71,8 +133,10 @@ public class CharacterCreationScreen extends Screen {
         
         graphics.fill(guiLeft - 5, guiTop - 5, guiLeft + WIDTH + 5, guiTop + HEIGHT + 5, 0x80000000);
         
-        graphics.drawString(font, Component.translatable("screen.persona.character_name"), 
-                guiLeft + PADDING, guiTop + PADDING - 12, 0xFFFFFF);
+        if (font != null) {
+            graphics.drawString(font, Component.translatable("screen.persona.character_name"), 
+                    guiLeft + PADDING, guiTop + PADDING - 12, 0xFFFFFF);
+        }
         
         renderables.forEach(renderable -> renderable.render(graphics, mouseX, mouseY, partialTick));
     }

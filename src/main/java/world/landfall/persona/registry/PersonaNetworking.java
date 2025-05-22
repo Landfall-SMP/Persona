@@ -25,16 +25,19 @@ public class PersonaNetworking {
     private static final ResourceLocation SYNC_TO_SERVER_ID = ResourceLocation.tryParse(Persona.MODID + ":sync_to_server");
     private static final ResourceLocation ACTION_ID = ResourceLocation.tryParse(Persona.MODID + ":character_action");
     private static final ResourceLocation SYNC_REQUEST_ID = ResourceLocation.tryParse(Persona.MODID + ":sync_request");
+    private static final ResourceLocation CREATION_RESPONSE_ID = ResourceLocation.tryParse(Persona.MODID + ":creation_response");
     
     private static CustomPacketPayload.Type<SyncToClientPayload> SYNC_TO_CLIENT_TYPE = null;
     private static CustomPacketPayload.Type<SyncToServerPayload> SYNC_TO_SERVER_TYPE = null;
     private static CustomPacketPayload.Type<CharacterActionPayload> ACTION_PACKET_TYPE = null;
     private static CustomPacketPayload.Type<SyncRequestPayload> SYNC_REQUEST_TYPE = null;
+    private static CustomPacketPayload.Type<CharacterCreationResponsePayload> CREATION_RESPONSE_TYPE = null;
     
     private static StreamCodec<RegistryFriendlyByteBuf, SyncToClientPayload> SYNC_TO_CLIENT_CODEC = null;
     private static StreamCodec<RegistryFriendlyByteBuf, SyncToServerPayload> SYNC_TO_SERVER_CODEC = null;
     private static StreamCodec<RegistryFriendlyByteBuf, CharacterActionPayload> ACTION_PACKET_CODEC = null;
     private static StreamCodec<RegistryFriendlyByteBuf, SyncRequestPayload> SYNC_REQUEST_CODEC = null;
+    private static StreamCodec<RegistryFriendlyByteBuf, CharacterCreationResponsePayload> CREATION_RESPONSE_CODEC = null;
     
     public enum Action {
         CREATE,
@@ -44,7 +47,7 @@ public class PersonaNetworking {
     
     @SubscribeEvent
     public static void registerPayloadHandlers(RegisterPayloadHandlersEvent event) {
-        if (SYNC_TO_CLIENT_TYPE != null || SYNC_TO_SERVER_TYPE != null || ACTION_PACKET_TYPE != null) {
+        if (SYNC_TO_CLIENT_TYPE != null || SYNC_TO_SERVER_TYPE != null || ACTION_PACKET_TYPE != null || CREATION_RESPONSE_TYPE != null) {
             Persona.LOGGER.warn("[Persona] Attempted to register payload handlers more than once. Skipping.");
             return;
         }
@@ -84,6 +87,14 @@ public class PersonaNetworking {
             );
             registrar.playToServer(SYNC_REQUEST_TYPE, SYNC_REQUEST_CODEC, SyncRequestPayload.Handler::handleServerPacket);
             
+            // Register creation response packet (Server to Client)
+            CREATION_RESPONSE_TYPE = new CustomPacketPayload.Type<>(CREATION_RESPONSE_ID);
+            CREATION_RESPONSE_CODEC = StreamCodec.of(
+                (buf, payload) -> payload.write(buf),
+                CharacterCreationResponsePayload::new
+            );
+            registrar.playToClient(CREATION_RESPONSE_TYPE, CREATION_RESPONSE_CODEC, CharacterCreationResponsePayload.Handler::handleClientPacket);
+            
             Persona.LOGGER.info("[Persona] Payload handlers registered successfully.");
         } catch (Exception e) {
             Persona.LOGGER.error("[Persona] Failed to register payload handlers", e);
@@ -95,6 +106,8 @@ public class PersonaNetworking {
             ACTION_PACKET_CODEC = null;
             SYNC_REQUEST_TYPE = null;
             SYNC_REQUEST_CODEC = null;
+            CREATION_RESPONSE_TYPE = null;
+            CREATION_RESPONSE_CODEC = null;
         }
     }
     
@@ -159,14 +172,15 @@ public class PersonaNetworking {
         }
     }
     
-    public static record CharacterActionPayload(Action action, String data) implements CustomPacketPayload {
+    public static record CharacterActionPayload(Action action, String data, boolean fromGui) implements CustomPacketPayload {
         public CharacterActionPayload(RegistryFriendlyByteBuf buf) {
-            this(Action.values()[buf.readByte()], buf.readUtf());
+            this(Action.values()[buf.readByte()], buf.readUtf(), buf.readBoolean());
         }
         
         public void write(FriendlyByteBuf buf) {
             buf.writeByte(action.ordinal());
             buf.writeUtf(data);
+            buf.writeBoolean(fromGui);
         }
         
         @Override
@@ -184,21 +198,21 @@ public class PersonaNetworking {
                         switch (payload.action()) {
                             case CREATE -> {
                                 try {
-                                    CommandRegistry.createCharacter(serverPlayer, payload.data());
+                                    CommandRegistry.createCharacter(serverPlayer, payload.data(), payload.fromGui());
                                 } catch (Exception e) {
                                     Persona.LOGGER.error("[Persona] Failed to create character", e);
                                 }
                             }
                             case SWITCH -> {
                                 try {
-                                    CommandRegistry.switchCharacter(serverPlayer, payload.data());
+                                    CommandRegistry.switchCharacter(serverPlayer, payload.data(), payload.fromGui());
                                 } catch (Exception e) {
                                     Persona.LOGGER.error("[Persona] Failed to switch character", e);
                                 }
                             }
                             case DELETE -> {
                                 try {
-                                    CommandRegistry.deleteCharacter(serverPlayer, payload.data());
+                                    CommandRegistry.deleteCharacter(serverPlayer, payload.data(), payload.fromGui());
                                 } catch (Exception e) {
                                     Persona.LOGGER.error("[Persona] Failed to delete character", e);
                                 }
@@ -239,6 +253,36 @@ public class PersonaNetworking {
         }
     }
     
+    public static record CharacterCreationResponsePayload(boolean success, String messageKey, String[] messageArgs) implements CustomPacketPayload {
+        public CharacterCreationResponsePayload(RegistryFriendlyByteBuf buf) {
+            this(buf.readBoolean(), buf.readUtf(), buf.readArray(String[]::new, FriendlyByteBuf::readUtf));
+        }
+        
+        public void write(FriendlyByteBuf buf) {
+            buf.writeBoolean(success);
+            buf.writeUtf(messageKey);
+            buf.writeArray(messageArgs, FriendlyByteBuf::writeUtf);
+        }
+        
+        @Override
+        public Type<CharacterCreationResponsePayload> type() {
+            if (CREATION_RESPONSE_TYPE == null) {
+                throw new IllegalStateException("Attempted to use CREATION_RESPONSE_TYPE before it was initialized");
+            }
+            return CREATION_RESPONSE_TYPE;
+        }
+
+        public static class Handler {
+            public static void handleClientPacket(final CharacterCreationResponsePayload payload, final IPayloadContext context) {
+                context.enqueueWork(() -> {
+                    // Delegate to client-side handler
+                    world.landfall.persona.client.network.ClientNetworkHandler
+                        .handleCharacterCreationResponse(payload.success(), payload.messageKey(), payload.messageArgs());
+                });
+            }
+        }
+    }
+    
     public static void sendToPlayer(PlayerCharacterData data, ServerPlayer player) {
         if (SYNC_TO_CLIENT_TYPE == null) {
             Persona.LOGGER.error("[Persona] Cannot send packet, network not initialized");
@@ -256,11 +300,14 @@ public class PersonaNetworking {
     }
     
     public static void sendActionToServer(Action action, String data) {
-        if (ACTION_PACKET_TYPE == null) {
-            Persona.LOGGER.error("[Persona] Cannot send packet, network not initialized");
-            return;
+        sendActionToServer(action, data, false);
+    }
+    
+    public static void sendActionToServer(Action action, String data, boolean fromGui) {
+        if (ACTION_PACKET_TYPE == null || ACTION_PACKET_CODEC == null) {
+            throw new IllegalStateException("Attempted to send action packet before packet types were initialized");
         }
-        PacketDistributor.sendToServer(new CharacterActionPayload(action, data));
+        PacketDistributor.sendToServer(new CharacterActionPayload(action, data, fromGui));
     }
     
     /**
@@ -272,5 +319,14 @@ public class PersonaNetworking {
             return;
         }
         PacketDistributor.sendToServer(new SyncRequestPayload());
+    }
+
+    // New send method for the response
+    public static void sendCreationResponseToPlayer(ServerPlayer player, boolean success, String messageKey, String... messageArgs) {
+        if (CREATION_RESPONSE_TYPE == null) {
+            Persona.LOGGER.error("[Persona] Cannot send creation response, network not initialized");
+            return;
+        }
+        PacketDistributor.sendToPlayer(player, new CharacterCreationResponsePayload(success, messageKey, messageArgs));
     }
 } 

@@ -9,6 +9,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -16,6 +17,7 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import org.slf4j.Logger;
 import world.landfall.persona.command.CommandRegistry;
 import world.landfall.persona.config.Config;
+import world.landfall.persona.data.CharacterProfile;
 import world.landfall.persona.registry.GlobalCharacterRegistry;
 
 @Mod(Persona.MODID)
@@ -25,6 +27,7 @@ public class Persona {
 
     public Persona(IEventBus modEventBus, ModContainer modContainer) {
         modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(this::onConfigReload);
         modContainer.registerConfig(ModConfig.Type.SERVER, Config.SPEC);
 
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
@@ -33,6 +36,13 @@ public class Persona {
     private void commonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info("[Persona] Initializing core systems...");
         GlobalCharacterRegistry.initialize();
+    }
+
+    private void onConfigReload(final ModConfigEvent.Reloading event) {
+        if (event.getConfig().getSpec() == Config.SPEC) {
+            LOGGER.info("[Persona] Reloading config...");
+            CharacterProfile.updateNamePattern();
+        }
     }
 
     public void registerCommands(final RegisterCommandsEvent event) {

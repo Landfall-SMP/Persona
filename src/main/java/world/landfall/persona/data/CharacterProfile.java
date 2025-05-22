@@ -1,20 +1,35 @@
 package world.landfall.persona.data;
 
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import world.landfall.persona.config.Config;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 public class CharacterProfile {
+    private static Pattern NAME_PATTERN = null; // Will be initialized from config
     private final UUID id;
     private String displayName;
     private final Map<ResourceLocation, CompoundTag> modData;
 
-    public CharacterProfile(UUID id, String displayName) {
+    static {
+        updateNamePattern();
+    }
+
+    public CharacterProfile(UUID id, String displayName) throws IllegalArgumentException {
         this.id = id;
-        this.displayName = displayName;
+        setDisplayName(displayName, true); // Validate on creation
+        this.modData = new HashMap<>();
+    }
+
+    private CharacterProfile(UUID id, String displayName, boolean skipValidation) {
+        this.id = id;
+        setDisplayName(displayName, skipValidation);
         this.modData = new HashMap<>();
     }
 
@@ -26,8 +41,36 @@ public class CharacterProfile {
         return displayName;
     }
 
-    public void setDisplayName(String displayName) {
+    public void setDisplayName(String displayName) throws IllegalArgumentException {
+        setDisplayName(displayName, true); // Validate when changing name
+    }
+
+    private void setDisplayName(String displayName, boolean validate) throws IllegalArgumentException {
+        if (validate && !isValidName(displayName)) {
+            throw new IllegalArgumentException(Component.translatable("command.persona.error.invalid_name").getString());
+        }
         this.displayName = displayName;
+    }
+
+    /**
+     * Validates if a given name matches the configured pattern.
+     * @param name The name to validate
+     * @return true if the name is valid, false otherwise
+     */
+    public static boolean isValidName(String name) {
+        if (NAME_PATTERN == null) {
+            updateNamePattern();
+        }
+        return name != null && NAME_PATTERN.matcher(name).matches();
+    }
+
+    /**
+     * Updates the name validation pattern from the config.
+     * Should be called when the config is reloaded.
+     * @throws PatternSyntaxException if the pattern in the config is invalid
+     */
+    public static void updateNamePattern() {
+        NAME_PATTERN = Pattern.compile(Config.NAME_VALIDATION_REGEX.get());
     }
 
     public Map<ResourceLocation, CompoundTag> getModData() {
@@ -61,7 +104,7 @@ public class CharacterProfile {
     public static CharacterProfile deserialize(CompoundTag tag) {
         UUID id = tag.getUUID("id");
         String name = tag.getString("name");
-        CharacterProfile profile = new CharacterProfile(id, name);
+        CharacterProfile profile = new CharacterProfile(id, name, false); // Skip validation for stored data
 
         CompoundTag dataTag = tag.getCompound("characterData");
         for (String key : dataTag.getAllKeys()) {

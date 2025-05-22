@@ -10,34 +10,64 @@ import world.landfall.persona.config.Config;
 import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.data.PlayerCharacterCapability;
 import world.landfall.persona.registry.PersonaNetworking;
+import world.landfall.persona.client.network.CharacterSyncManager;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 public class CharacterManagementScreen extends Screen {
-    private static final int BUTTON_HEIGHT = 20;
-    private static final int LIST_ITEM_HEIGHT = 25;
-    private static final int MAX_VISIBLE_ITEMS = 5;
-    private static final int CREATE_BUTTON_SIZE = 20;
-    private static final int LIST_WIDTH = 300;
-    private static final int LIST_HEIGHT = (MAX_VISIBLE_ITEMS + 1) * LIST_ITEM_HEIGHT;
+    // UI Layout Constants
+    private static final class Layout {
+        static final int BUTTON_HEIGHT = 20;
+        static final int LIST_ITEM_HEIGHT = 25;
+        static final int MAX_VISIBLE_ITEMS = 5;
+        static final int CREATE_BUTTON_SIZE = 20;
+        static final int LIST_WIDTH = 300;
+        static final int LIST_HEIGHT = (MAX_VISIBLE_ITEMS + 1) * LIST_ITEM_HEIGHT;
+        
+        // Button positioning
+        static final int BUTTON_Y_OFFSET = 2;
+        static final int SWITCH_BUTTON_X_WITH_DELETE = 239;
+        static final int SWITCH_BUTTON_X_WITHOUT_DELETE = 264;
+        static final int DELETE_BUTTON_X = 264;
+        
+        // Scrollbar
+        static final int SCROLLBAR_WIDTH = 8;
+        static final int SCROLLBAR_MARGIN = 3;
+        static final int MIN_THUMB_HEIGHT = 15;
+        
+        // Panel
+        static final int PANEL_PADDING = 5;
+        static final int TITLE_Y_OFFSET = 20;
+        static final int NAME_Y_OFFSET = 6;
+    }
     
+    // UI Colors
+    private static final class Colors {
+        static final int PANEL_BACKGROUND = 0x80000000;
+        static final int SCROLLBAR_TRACK = 0x80333333;
+        static final int SCROLLBAR_THUMB = 0xFFBBBBBB;
+        static final int TEXT_COLOR = 0xFFFFFF;
+        static final int ACTIVE_CHARACTER = 0x00FF00;
+        static final int SWITCH_BUTTON = 0x66CCFF;
+        static final int DELETE_BUTTON = 0xFF0000;
+        static final int CREATE_BUTTON = 0x00FF00;
+    }
+
     private final Player player;
     private int guiLeft;
     private int guiTop;
     private List<CharacterEntry> characterList = new ArrayList<>();
     private int scrollOffset = 0;
-    private long lastUpdateTime = 0;
-    private static final long UPDATE_INTERVAL = 100;
-    
-    // store buttons as fields
+    private CharacterSyncManager syncManager;
     private final List<Button> switchButtons = new ArrayList<>();
     private final List<Button> deleteButtons = new ArrayList<>();
     
     public CharacterManagementScreen(Player player) {
         super(Component.translatable("screen.persona.character_management"));
         this.player = Objects.requireNonNull(player, "Player cannot be null");
+        this.syncManager = new CharacterSyncManager(this::handleSyncComplete);
     }
     
     @Override
@@ -47,32 +77,39 @@ public class CharacterManagementScreen extends Screen {
         this.switchButtons.clear();
         this.deleteButtons.clear();
         
-        guiLeft = (width - LIST_WIDTH) / 2;
-        guiTop = (height - LIST_HEIGHT) / 2;
+        guiLeft = (width - Layout.LIST_WIDTH) / 2;
+        guiTop = (height - Layout.LIST_HEIGHT) / 2;
         
         // resync on open
-        PersonaNetworking.requestCharacterSync();
+        syncManager.startSync();
         updateCharacterList();
+        
+        // If there are no characters, go directly to character creation
+        PlayerCharacterData data = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
+        if (data != null && data.getCharacters().isEmpty() && minecraft != null) {
+            minecraft.setScreen(new CharacterCreationScreen(this));
+            return;
+        }
         
         Button createButton = Button.builder(Component.literal("+"), button -> {
             if (minecraft != null) {
                 minecraft.setScreen(new CharacterCreationScreen(this));
             }
-        }).bounds(guiLeft + LIST_WIDTH - CREATE_BUTTON_SIZE, guiTop + LIST_HEIGHT - CREATE_BUTTON_SIZE, 
-                 CREATE_BUTTON_SIZE, CREATE_BUTTON_SIZE).build();
-        createButton.setFGColor(0x00FF00); // Green color
+        }).bounds(guiLeft + Layout.LIST_WIDTH - Layout.CREATE_BUTTON_SIZE, guiTop + Layout.LIST_HEIGHT - Layout.CREATE_BUTTON_SIZE, 
+                 Layout.CREATE_BUTTON_SIZE, Layout.CREATE_BUTTON_SIZE).build();
+        createButton.setFGColor(Colors.CREATE_BUTTON); // Green color
         addRenderableWidget(createButton);
         
         // mk buttons for each slot
-        for (int i = 0; i < MAX_VISIBLE_ITEMS; i++) {
+        for (int i = 0; i < Layout.MAX_VISIBLE_ITEMS; i++) {
             Button switchButton = createSwitchButton(0, 0, "");
-            switchButton.setFGColor(0x66CCFF);
+            switchButton.setFGColor(Colors.SWITCH_BUTTON);
             switchButton.visible = false;
             switchButtons.add(switchButton);
             addRenderableWidget(switchButton);
             
             Button deleteButton = createDeleteButton(0, 0, "");
-            deleteButton.setFGColor(0xFF0000);
+            deleteButton.setFGColor(Colors.DELETE_BUTTON);
             deleteButton.visible = false;
             deleteButtons.add(deleteButton);
             addRenderableWidget(deleteButton);
@@ -92,8 +129,8 @@ public class CharacterManagementScreen extends Screen {
         if (!newList.equals(characterList)) {
             characterList = newList;
             // reset scroll if less items now
-            if (scrollOffset > Math.max(0, characterList.size() - MAX_VISIBLE_ITEMS)) {
-                scrollOffset = Math.max(0, characterList.size() - MAX_VISIBLE_ITEMS);
+            if (scrollOffset > Math.max(0, characterList.size() - Layout.MAX_VISIBLE_ITEMS)) {
+                scrollOffset = Math.max(0, characterList.size() - Layout.MAX_VISIBLE_ITEMS);
             }
         }
     }
@@ -103,7 +140,11 @@ public class CharacterManagementScreen extends Screen {
         super.renderBackground(graphics, mouseX, mouseY, partialTick);
         
         // dark panel, looks prettier
-        graphics.fill(guiLeft - 5, guiTop - 5, guiLeft + LIST_WIDTH + 5, guiTop + LIST_HEIGHT + 5, 0x80000000);
+        graphics.fill(guiLeft - Layout.PANEL_PADDING, 
+                     guiTop - Layout.PANEL_PADDING, 
+                     guiLeft + Layout.LIST_WIDTH + Layout.PANEL_PADDING, 
+                     guiTop + Layout.LIST_HEIGHT + Layout.PANEL_PADDING, 
+                     Colors.PANEL_BACKGROUND);
         
         // Get active char
         PlayerCharacterData data = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
@@ -119,17 +160,19 @@ public class CharacterManagementScreen extends Screen {
         // update button positions and visibility
         int listX = guiLeft;
         int listY = guiTop;
-        int visibleItems = Math.min(MAX_VISIBLE_ITEMS, characterList.size() - scrollOffset);
+        int visibleItems = Math.min(Layout.MAX_VISIBLE_ITEMS, characterList.size() - scrollOffset);
         
         for (int i = 0; i < visibleItems; i++) {
             CharacterEntry entry = characterList.get(i + scrollOffset);
-            int y = listY + (i * LIST_ITEM_HEIGHT);
+            int y = listY + (i * Layout.LIST_ITEM_HEIGHT);
             boolean isActiveCharacter = activeCharacterId != null && activeCharacterId.equals(entry.id);
             
             // switch
             Button switchButton = switchButtons.get(i);
-            switchButton.setX(listX + 239);
-            switchButton.setY(y + 2);
+            switchButton.setX(Config.ENABLE_CHARACTER_DELETION.get() ? 
+                            listX + Layout.SWITCH_BUTTON_X_WITH_DELETE : 
+                            listX + Layout.SWITCH_BUTTON_X_WITHOUT_DELETE);
+            switchButton.setY(y + Layout.BUTTON_Y_OFFSET);
             switchButton.setMessage(Component.literal("🔀"));
             switchButton.visible = !isActiveCharacter;
             switchButton.active = !isActiveCharacter;
@@ -137,8 +180,8 @@ public class CharacterManagementScreen extends Screen {
             // delete
             if (Config.ENABLE_CHARACTER_DELETION.get()) {
                 Button deleteButton = deleteButtons.get(i);
-                deleteButton.setX(listX + 264);
-                deleteButton.setY(y + 2);
+                deleteButton.setX(listX + Layout.DELETE_BUTTON_X);
+                deleteButton.setY(y + Layout.BUTTON_Y_OFFSET);
                 deleteButton.setMessage(Component.literal("X"));
                 deleteButton.visible = !isActiveCharacter;
                 deleteButton.active = !isActiveCharacter;
@@ -149,40 +192,44 @@ public class CharacterManagementScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
         
         // scrollbar if needed
-        int scrollableAreaHeight = MAX_VISIBLE_ITEMS * LIST_ITEM_HEIGHT;
-        if (characterList.size() > MAX_VISIBLE_ITEMS) {
-            int scrollBarWidth = 8;
-            int scrollBarX = guiLeft + LIST_WIDTH - scrollBarWidth - 3; // Inside panel, right side
+        int scrollableAreaHeight = Layout.MAX_VISIBLE_ITEMS * Layout.LIST_ITEM_HEIGHT;
+        if (characterList.size() > Layout.MAX_VISIBLE_ITEMS) {
+            int scrollBarX = guiLeft + Layout.LIST_WIDTH - Layout.SCROLLBAR_WIDTH - Layout.SCROLLBAR_MARGIN;
             
             // scrollbar track
-            graphics.fill(scrollBarX, guiTop, scrollBarX + scrollBarWidth, guiTop + scrollableAreaHeight, 0x80333333); 
+            graphics.fill(scrollBarX, guiTop, 
+                         scrollBarX + Layout.SCROLLBAR_WIDTH, 
+                         guiTop + scrollableAreaHeight, 
+                         Colors.SCROLLBAR_TRACK);
 
             // calculate pos's
-            float thumbHeightRatio = (float)MAX_VISIBLE_ITEMS / characterList.size();
+            float thumbHeightRatio = (float)Layout.MAX_VISIBLE_ITEMS / characterList.size();
             int scrollBarThumbHeight = (int)(scrollableAreaHeight * thumbHeightRatio);
-            scrollBarThumbHeight = Math.max(15, scrollBarThumbHeight); // Minimum thumb height
+            scrollBarThumbHeight = Math.max(Layout.MIN_THUMB_HEIGHT, scrollBarThumbHeight);
 
-            int maxScroll = characterList.size() - MAX_VISIBLE_ITEMS;
+            int maxScroll = characterList.size() - Layout.MAX_VISIBLE_ITEMS;
             float scrollPercentage = (maxScroll == 0) ? 0 : (float)scrollOffset / maxScroll;
             int scrollBarThumbY = guiTop + (int)(scrollPercentage * (scrollableAreaHeight - scrollBarThumbHeight));
 
-            // aaand draw the lovely scrollbar
+            // draw the scrollbar thumb
             graphics.fill(scrollBarX + 1, scrollBarThumbY + 1, 
-                          scrollBarX + scrollBarWidth - 1, scrollBarThumbY + scrollBarThumbHeight - 1, 
-                          0xFFBBBBBB);
+                         scrollBarX + Layout.SCROLLBAR_WIDTH - 1, 
+                         scrollBarThumbY + scrollBarThumbHeight - 1, 
+                         Colors.SCROLLBAR_THUMB);
         }
         
         // text
-        graphics.drawCenteredString(font, title, width / 2, guiTop - 20, 0xFFFFFF);
+        graphics.drawCenteredString(font, title, width / 2, guiTop - Layout.TITLE_Y_OFFSET, Colors.TEXT_COLOR);
         
         for (int i = 0; i < visibleItems; i++) {
             CharacterEntry entry = characterList.get(i + scrollOffset);
-            int y = listY + (i * LIST_ITEM_HEIGHT);
+            int y = listY + (i * Layout.LIST_ITEM_HEIGHT);
             
             // Draw character name, green if selected
-            int nameColor = (activeCharacterId != null && activeCharacterId.equals(entry.id)) ? 0x00FF00 : 0xFFFFFF;
+            int nameColor = (activeCharacterId != null && activeCharacterId.equals(entry.id)) ? 
+                          Colors.ACTIVE_CHARACTER : Colors.TEXT_COLOR;
             if (font != null) {
-                graphics.drawString(font, entry.name, listX, y + 6, nameColor);
+                graphics.drawString(font, entry.name, listX, y + Layout.NAME_Y_OFFSET, nameColor);
             }
         }
     }
@@ -197,10 +244,15 @@ public class CharacterManagementScreen extends Screen {
             int index = switchButtons.indexOf(button);
             if (index >= 0 && index + scrollOffset < characterList.size()) {
                 CharacterEntry entry = characterList.get(index + scrollOffset);
-                PersonaNetworking.sendActionToServer(PersonaNetworking.Action.SWITCH, entry.name);
+                PersonaNetworking.sendActionToServer(PersonaNetworking.Action.SWITCH, entry.name, true);
+                if (minecraft != null) {
+                    minecraft.getToasts().addToast(NotificationToast.success(
+                        Component.translatable("command.persona.success.switch", entry.name)
+                    ));
+                }
                 requestSync();
             }
-        }).bounds(x, y, BUTTON_HEIGHT, BUTTON_HEIGHT).build();
+        }).bounds(x, y, Layout.BUTTON_HEIGHT, Layout.BUTTON_HEIGHT).build();
     }
     
     @SuppressWarnings("null")
@@ -215,22 +267,26 @@ public class CharacterManagementScreen extends Screen {
                     minecraft.setScreen(new ConfirmScreen(
                         (confirmed) -> {
                             if (confirmed) {
-                                PersonaNetworking.sendActionToServer(PersonaNetworking.Action.DELETE, entryToDelete.name);
+                                PersonaNetworking.sendActionToServer(PersonaNetworking.Action.DELETE, entryToDelete.name, true);
+                                if (minecraft != null) {
+                                    minecraft.getToasts().addToast(NotificationToast.success(
+                                        Component.translatable("command.persona.success.delete", entryToDelete.name)
+                                    ));
+                                }
                                 requestSync();
                             }
                             minecraft.setScreen(CharacterManagementScreen.this); 
                         },
-                        Component.literal("Confirm Deletion"), // TODO: translatable
-                        Component.literal("Are you sure you want to delete character '" + entryToDelete.name + "'?") // TODO: translatable
+                        Component.translatable("gui.persona.dialog.confirm_delete"),
+                        Component.translatable("gui.persona.dialog.confirm_delete_message", entryToDelete.name)
                     ));
                 }
             }
-        }).bounds(x, y, BUTTON_HEIGHT, BUTTON_HEIGHT).build();
+        }).bounds(x, y, Layout.BUTTON_HEIGHT, Layout.BUTTON_HEIGHT).build();
     }
     
     private void requestSync() {
-        PersonaNetworking.requestCharacterSync();
-        lastUpdateTime = System.currentTimeMillis();
+        syncManager.startSync();
     }
     
     @Override
@@ -242,7 +298,7 @@ public class CharacterManagementScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (scrollY != 0) {
-            int maxScroll = Math.max(0, characterList.size() - MAX_VISIBLE_ITEMS);
+            int maxScroll = Math.max(0, characterList.size() - Layout.MAX_VISIBLE_ITEMS);
             scrollOffset = (int) Math.max(0, Math.min(maxScroll, scrollOffset - scrollY));
             return true;
         }
@@ -252,12 +308,19 @@ public class CharacterManagementScreen extends Screen {
     @Override
     public void tick() {
         super.tick();
-        // keep list updated
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastUpdateTime > UPDATE_INTERVAL) {
-            updateCharacterList();
-            lastUpdateTime = currentTime;
+        
+        // Update character list periodically
+        updateCharacterList();
+        
+        // Handle sync
+        syncManager.tick();
+    }
+    
+    private void handleSyncComplete(boolean success) {
+        if (!success) {
+            UIErrorHandler.showError("gui.persona.error.sync_failed");
         }
+        updateCharacterList();
     }
     
     private record CharacterEntry(String id, String name) {}
