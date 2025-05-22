@@ -19,6 +19,7 @@ import world.landfall.persona.command.CommandRegistry;
 import world.landfall.persona.config.Config;
 import world.landfall.persona.data.CharacterProfile;
 import world.landfall.persona.registry.GlobalCharacterRegistry;
+import world.landfall.persona.util.NameListManager;
 
 @Mod(Persona.MODID)
 public class Persona {
@@ -31,11 +32,17 @@ public class Persona {
         modContainer.registerConfig(ModConfig.Type.SERVER, Config.SPEC);
 
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
+
+        // Initialize name lists
+        NameListManager.init();
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info("[Persona] Initializing core systems...");
         GlobalCharacterRegistry.initialize();
+
+        // Reload name lists when server starts
+        NameListManager.reloadLists();
     }
 
     private void onConfigReload(final ModConfigEvent.Reloading event) {

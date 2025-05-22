@@ -61,7 +61,13 @@ public class CharacterProfile {
         if (NAME_PATTERN == null) {
             updateNamePattern();
         }
-        return name != null && NAME_PATTERN.matcher(name).matches();
+        // First check regex pattern
+        if (name == null || !NAME_PATTERN.matcher(name).matches()) {
+            return false;
+        }
+
+        // Then check blacklist/whitelist
+        return world.landfall.persona.util.NameListManager.isNameAllowed(name);
     }
 
     /**
