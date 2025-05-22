@@ -39,23 +39,39 @@ public class CommandRegistry {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal(Persona.MODID)
             .then(Commands.literal("create")
-                .then(Commands.argument("displayName", StringArgumentType.greedyString())
+                .then(Commands.argument("displayName", StringArgumentType.string())
                     .executes(CommandRegistry::createCharacter)))
             .then(Commands.literal("switch")
-                .then(Commands.argument("characterNameOrUUID", StringArgumentType.greedyString())
+                .then(Commands.argument("characterNameOrUUID", StringArgumentType.string())
                     .executes(CommandRegistry::switchCharacter)))
             .then(Commands.literal("list")
                 .executes(CommandRegistry::listCharacters))
             .then(Commands.literal("delete")
-                .then(Commands.argument("characterNameOrUUID", StringArgumentType.greedyString())
+                .then(Commands.argument("characterNameOrUUID", StringArgumentType.string())
                     .executes(CommandRegistry::deleteCharacter)))
             .then(Commands.literal("rename")
-                .then(Commands.argument("newName", StringArgumentType.greedyString())
+                .then(Commands.argument("newName", StringArgumentType.string())
                     .executes(CommandRegistry::renameCharacter)))
             .then(Commands.literal("debug")
                 .requires(source -> source.hasPermission(2)) // Requires permission level 2 (ops)
                 .then(Commands.literal("registry")
                     .executes(CommandRegistry::debugRegistry)))
+            // Admin commands
+            .then(Commands.literal("admin")
+                .requires(source -> source.hasPermission(2)) // Requires permission level 2 (ops)
+                .then(Commands.literal("listall")
+                    .then(Commands.argument("playerName", StringArgumentType.word())
+                        .executes(CommandRegistry::adminListCharacters)))
+                .then(Commands.literal("forcedelete")
+                    .then(Commands.argument("playerName", StringArgumentType.word())
+                    .then(Commands.argument("characterNameOrUUID", StringArgumentType.string())
+                        .executes(CommandRegistry::adminDeleteCharacter))))
+                .then(Commands.literal("forcerename")
+                    .then(Commands.argument("playerName", StringArgumentType.word())
+                    .then(Commands.argument("characterNameOrUUID", StringArgumentType.string())
+                    .then(Commands.argument("newName", StringArgumentType.string())
+                        .executes(CommandRegistry::adminRenameCharacter)))))
+            )
         );
     }
 
@@ -162,13 +178,20 @@ public class CommandRegistry {
             return 1;
         }
 
-        StringBuilder sb = new StringBuilder(Component.translatable("command.persona.list.header").getString() + "\n");
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n§6=== Your Characters ===§r\n");
         characterData.getCharacters().forEach((uuid, profile) -> {
-            sb.append("- ").append(profile.getDisplayName()).append(" (UUID: ").append(uuid).append(")");
             if (uuid.equals(characterData.getActiveCharacterId())) {
-                sb.append(" ").append(Component.translatable("command.persona.list.active_suffix").getString());
+                sb.append("§a➤ "); // Green arrow for active character
+            } else {
+                sb.append("§7• "); // Gray bullet for inactive characters
             }
-            sb.append("\n");
+            sb.append("§f").append(profile.getDisplayName()); // White text for name
+            sb.append(" §8(").append(uuid.toString().substring(0, 8)).append(")"); // Gray UUID
+            if (uuid.equals(characterData.getActiveCharacterId())) {
+                sb.append(" §a(Active)"); // Green active indicator
+            }
+            sb.append("§r\n");
         });
 
         context.getSource().sendSuccess(() -> Component.literal(sb.toString()), false);
@@ -280,50 +303,196 @@ public class CommandRegistry {
         Map<UUID, UUID> characterToPlayerMap = GlobalCharacterRegistry.getCharacterToPlayerMap();
         Map<String, UUID> characterNameMap = GlobalCharacterRegistry.getCharacterNameMap();
 
-        source.sendSuccess(() -> Component.literal("=== Character Registry Debug ===")
-            .withStyle(style -> style.withColor(0x00FF00)), false);
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n§6=== Character Registry Debug ===§r\n");
         
-        source.sendSuccess(() -> Component.literal("\nCharacter to Player Mappings:"), false);
+        sb.append("\n§eCharacter to Player Mappings:§r\n");
         if (characterToPlayerMap.isEmpty()) {
-            source.sendSuccess(() -> Component.literal("  No character mappings found")
-                .withStyle(style -> style.withColor(0xFFAA00)), false);
+            sb.append("§7  No character mappings found§r\n");
         } else {
             characterToPlayerMap.forEach((charId, playerId) -> {
-                // Find character name
                 final String characterName = characterNameMap.entrySet().stream()
                     .filter(entry -> entry.getValue().equals(charId))
                     .map(Map.Entry::getKey)
                     .findFirst()
                     .orElse("Unknown");
 
-                source.sendSuccess(() -> Component.literal(String.format("  Character: %s (%s) -> Player: %s",
-                    characterName, charId.toString().substring(0, 8), playerId.toString().substring(0, 8)))
-                    .withStyle(style -> style.withColor(0xFFFFFF)), false);
+                sb.append("§7• §f").append(characterName)
+                  .append(" §8(").append(charId.toString().substring(0, 8)).append(")")
+                  .append(" §7→ §f").append(playerId.toString().substring(0, 8))
+                  .append("§r\n");
             });
         }
 
-        source.sendSuccess(() -> Component.literal("\nCharacter Name Mappings:"), false);
+        sb.append("\n§eCharacter Name Mappings:§r\n");
         if (characterNameMap.isEmpty()) {
-            source.sendSuccess(() -> Component.literal("  No name mappings found")
-                .withStyle(style -> style.withColor(0xFFAA00)), false);
+            sb.append("§7  No name mappings found§r\n");
         } else {
             characterNameMap.forEach((name, charId) -> {
-                source.sendSuccess(() -> Component.literal(String.format("  Name: %s -> Character ID: %s",
-                    name, charId.toString().substring(0, 8)))
-                    .withStyle(style -> style.withColor(0xFFFFFF)), false);
+                sb.append("§7• §f").append(name)
+                  .append(" §7→ §8").append(charId.toString().substring(0, 8))
+                  .append("§r\n");
             });
         }
 
         // Show registry file location
         Path registryPath = RegistryPersistence.getRegistryPath();
         if (registryPath != null) {
-            source.sendSuccess(() -> Component.literal("\nRegistry File Location:")
-                .withStyle(style -> style.withColor(0x00FF00)), false);
-            source.sendSuccess(() -> Component.literal("  " + registryPath.toString())
-                .withStyle(style -> style.withColor(0xFFFFFF)), false);
+            sb.append("\n§eRegistry File Location:§r\n");
+            sb.append("§7  ").append(registryPath).append("§r\n");
         }
 
+        source.sendSuccess(() -> Component.literal(sb.toString()), false);
         return 1;
+    }
+
+    private static int adminListCharacters(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        String playerName = StringArgumentType.getString(context, "playerName");
+        ServerPlayer targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(playerName);
+        
+        if (targetPlayer == null) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.player_not_found", playerName));
+            return 0;
+        }
+
+        PlayerCharacterData characterData = targetPlayer.getData(PlayerCharacterCapability.CHARACTER_DATA);
+        if (characterData == null || characterData.getCharacters().isEmpty()) {
+            context.getSource().sendSuccess(() -> Component.translatable("command.persona.admin.no_characters", playerName), false);
+            return 1;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n§6=== Characters for §f").append(playerName).append(" §6===§r\n");
+        characterData.getCharacters().forEach((uuid, profile) -> {
+            if (uuid.equals(characterData.getActiveCharacterId())) {
+                sb.append("§a➤ "); // Green arrow for active character
+            } else {
+                sb.append("§7• "); // Gray bullet for inactive characters
+            }
+            sb.append("§f").append(profile.getDisplayName()); // White text for name
+            sb.append(" §8(").append(uuid.toString().substring(0, 8)).append(")"); // Gray UUID
+            if (uuid.equals(characterData.getActiveCharacterId())) {
+                sb.append(" §a(Active)"); // Green active indicator
+            }
+            sb.append("§r\n");
+        });
+
+        context.getSource().sendSuccess(() -> Component.literal(sb.toString()), false);
+        return 1;
+    }
+
+    private static int adminDeleteCharacter(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        String playerName = StringArgumentType.getString(context, "playerName");
+        String nameOrUUID = StringArgumentType.getString(context, "characterNameOrUUID");
+        ServerPlayer targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(playerName);
+        
+        if (targetPlayer == null) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.player_not_found", playerName));
+            return 0;
+        }
+
+        PlayerCharacterData characterData = targetPlayer.getData(PlayerCharacterCapability.CHARACTER_DATA);
+        if (characterData == null) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.data_not_found"));
+            return 0;
+        }
+
+        UUID foundCharacterId = findCharacterId(nameOrUUID, characterData);
+        if (foundCharacterId == null) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.not_found", nameOrUUID));
+            return 0;
+        }
+
+        CharacterProfile targetProfile = characterData.getCharacter(foundCharacterId);
+        if (targetProfile == null) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.char_not_found_or_not_yours", nameOrUUID));
+            return 0;
+        }
+
+        // If it's the active character, force switch to another character first
+        if (foundCharacterId.equals(characterData.getActiveCharacterId())) {
+            Optional<UUID> newActiveId = characterData.getCharacters().keySet().stream()
+                .filter(id -> !id.equals(foundCharacterId))
+                .findFirst();
+            
+            if (newActiveId.isPresent()) {
+                characterData.setActiveCharacterId(newActiveId.get());
+            } else {
+                characterData.setActiveCharacterId(null);
+            }
+        }
+
+        String characterName = targetProfile.getDisplayName();
+        characterData.removeCharacter(foundCharacterId);
+        GlobalCharacterRegistry.unregisterCharacter(foundCharacterId, characterName);
+        
+        context.getSource().sendSuccess(() -> Component.translatable("command.persona.admin.success.delete", 
+            characterName, playerName), true);
+        return 1;
+    }
+
+    private static int adminRenameCharacter(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        String playerName = StringArgumentType.getString(context, "playerName");
+        String nameOrUUID = StringArgumentType.getString(context, "characterNameOrUUID");
+        String newName = StringArgumentType.getString(context, "newName");
+        ServerPlayer targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(playerName);
+        
+        if (targetPlayer == null) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.player_not_found", playerName));
+            return 0;
+        }
+
+        PlayerCharacterData characterData = targetPlayer.getData(PlayerCharacterCapability.CHARACTER_DATA);
+        if (characterData == null) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.data_not_found"));
+            return 0;
+        }
+
+        UUID foundCharacterId = findCharacterId(nameOrUUID, characterData);
+        if (foundCharacterId == null) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.not_found", nameOrUUID));
+            return 0;
+        }
+
+        CharacterProfile targetProfile = characterData.getCharacter(foundCharacterId);
+        if (targetProfile == null) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.char_not_found_or_not_yours", nameOrUUID));
+            return 0;
+        }
+
+        // Validate new name format
+        if (!CharacterProfile.isValidName(newName)) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.invalid_name"));
+            return 0;
+        }
+
+        // Check if new name is taken globally, unless it's the same as current character (case-insensitive)
+        if (!newName.equalsIgnoreCase(targetProfile.getDisplayName()) && GlobalCharacterRegistry.isNameTaken(newName)) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.name_taken_other", newName));
+            return 0;
+        }
+
+        String oldName = targetProfile.getDisplayName();
+        GlobalCharacterRegistry.unregisterCharacter(foundCharacterId, oldName);
+        targetProfile.setDisplayName(newName);
+        GlobalCharacterRegistry.registerCharacter(foundCharacterId, targetPlayer.getUUID(), newName);
+        
+        context.getSource().sendSuccess(() -> Component.translatable("command.persona.admin.success.rename", 
+            oldName, newName, playerName), true);
+        return 1;
+    }
+
+    private static UUID findCharacterId(String nameOrUUID, PlayerCharacterData characterData) {
+        try {
+            return UUID.fromString(nameOrUUID);
+        } catch (IllegalArgumentException e) {
+            for (CharacterProfile profile : characterData.getCharacters().values()) {
+                if (profile.getDisplayName().equalsIgnoreCase(nameOrUUID)) {
+                    return profile.getId();
+                }
+            }
+            return null;
+        }
     }
 
     public static void createCharacter(ServerPlayer player, String displayName) {
