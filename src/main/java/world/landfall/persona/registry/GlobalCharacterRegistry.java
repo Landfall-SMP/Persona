@@ -5,6 +5,8 @@ import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import world.landfall.persona.Persona;
 import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.data.PlayerCharacterCapability;
@@ -31,6 +33,31 @@ public class GlobalCharacterRegistry {
             characterToPlayerMap.clear();
             characterNameMap.clear();
             Persona.LOGGER.info("[Persona] Global Character Registry initialized.");
+        } finally {
+            registryLock.writeLock().unlock();
+        }
+    }
+
+    @SubscribeEvent
+    public static void onServerStarting(ServerStartingEvent event) {
+        registryLock.writeLock().lock();
+        try {
+            RegistryPersistence.initialize(event.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT));
+            RegistryPersistence.RegistryData data = RegistryPersistence.loadRegistry();
+            characterToPlayerMap.putAll(data.characterToPlayerMap);
+            characterNameMap.putAll(data.characterNameMap);
+            Persona.LOGGER.info("[Persona] Global Character Registry loaded from disk.");
+        } finally {
+            registryLock.writeLock().unlock();
+        }
+    }
+
+    @SubscribeEvent
+    public static void onServerStopping(ServerStoppingEvent event) {
+        registryLock.writeLock().lock();
+        try {
+            RegistryPersistence.saveRegistry(characterToPlayerMap, characterNameMap);
+            Persona.LOGGER.info("[Persona] Global Character Registry saved to disk.");
         } finally {
             registryLock.writeLock().unlock();
         }
@@ -62,6 +89,7 @@ public class GlobalCharacterRegistry {
             
             characterToPlayerMap.put(characterId, playerId);
             characterNameMap.put(normalizedName, characterId);
+            RegistryPersistence.saveRegistry(characterToPlayerMap, characterNameMap);
             return true;
         } finally {
             registryLock.writeLock().unlock();
@@ -100,6 +128,7 @@ public class GlobalCharacterRegistry {
             // Update the name mapping
             characterNameMap.remove(normalizedOldName);
             characterNameMap.put(normalizedNewName, characterId);
+            RegistryPersistence.saveRegistry(characterToPlayerMap, characterNameMap);
             return true;
         } finally {
             registryLock.writeLock().unlock();
@@ -120,6 +149,7 @@ public class GlobalCharacterRegistry {
                 characterNameMap.remove(normalizedName);
             }
             characterToPlayerMap.remove(characterId);
+            RegistryPersistence.saveRegistry(characterToPlayerMap, characterNameMap);
         } finally {
             registryLock.writeLock().unlock();
         }
@@ -175,6 +205,7 @@ public class GlobalCharacterRegistry {
                         characterToPlayerMap.put(id, player.getUUID());
                         characterNameMap.put(profile.getDisplayName().toLowerCase(), id);
                     });
+                    RegistryPersistence.saveRegistry(characterToPlayerMap, characterNameMap);
                     PersonaNetworking.sendToPlayer(data, player);
                 } finally {
                     registryLock.writeLock().unlock();
@@ -185,24 +216,35 @@ public class GlobalCharacterRegistry {
     
     @SubscribeEvent
     public static void onPlayerLogout(final PlayerEvent.PlayerLoggedOutEvent event) {
-        removePlayerCharacters(event.getEntity());
+        // Nothing to do on logout - characters should persist in the registry
     }
     
-    public static void removePlayerCharacters(Player player) {
-        PlayerCharacterData data = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
-        if (data != null) {
-            registryLock.writeLock().lock();
-            try {
-                data.getCharacters().forEach((id, profile) -> {
-                    characterToPlayerMap.remove(id);
-                    characterNameMap.remove(profile.getDisplayName().toLowerCase());
-                });
-            } finally {
-                registryLock.writeLock().unlock();
+    /**
+     * Deletes a specific character from the registry.
+     * This should only be used when a character is being permanently deleted.
+     * @param characterId The UUID of the character to delete
+     * @param characterName The name of the character to delete
+     * @return true if the character was found and deleted, false if the character wasn't found
+     */
+    public static boolean deleteCharacter(UUID characterId, String characterName) {
+        if (characterId == null || characterName == null) {
+            throw new IllegalArgumentException("Character deletion parameters cannot be null");
+        }
+
+        String normalizedName = characterName.toLowerCase();
+        registryLock.writeLock().lock();
+        try {
+            // Only remove if the name matches the character
+            UUID existingCharId = characterNameMap.get(normalizedName);
+            if (characterId.equals(existingCharId)) {
+                characterNameMap.remove(normalizedName);
+                characterToPlayerMap.remove(characterId);
+                RegistryPersistence.saveRegistry(characterToPlayerMap, characterNameMap);
+                return true;
             }
-        } else {
-            Persona.LOGGER.warn("[Persona] Player {} missing character data for character removal from registry.",
-                              player.getName().getString());
+            return false;
+        } finally {
+            registryLock.writeLock().unlock();
         }
     }
 
@@ -223,6 +265,34 @@ public class GlobalCharacterRegistry {
             } finally {
                 registryLock.readLock().unlock();
             }
+        }
+    }
+
+    /**
+     * Gets a copy of the character to player mapping.
+     * This method is thread-safe.
+     * @return A copy of the character to player mapping
+     */
+    public static Map<UUID, UUID> getCharacterToPlayerMap() {
+        registryLock.readLock().lock();
+        try {
+            return new ConcurrentHashMap<>(characterToPlayerMap);
+        } finally {
+            registryLock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Gets a copy of the character name mapping.
+     * This method is thread-safe.
+     * @return A copy of the character name mapping
+     */
+    public static Map<String, UUID> getCharacterNameMap() {
+        registryLock.readLock().lock();
+        try {
+            return new ConcurrentHashMap<>(characterNameMap);
+        } finally {
+            registryLock.readLock().unlock();
         }
     }
 } 

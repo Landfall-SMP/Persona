@@ -105,14 +105,4 @@ public class PersonaEvents {
                 player.getClass().getSimpleName(), player.getData(PlayerCharacterCapability.CHARACTER_DATA) != null);
         }
     }
-    
-    @SubscribeEvent
-    public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
-        Player player = event.getEntity();
-        if (player != null) {
-            GlobalCharacterRegistry.removePlayerCharacters(player);
-        } else {
-            Persona.LOGGER.warn("[Persona] PlayerLoggedOutEvent with null player entity.");
-        }
-    }
 } 

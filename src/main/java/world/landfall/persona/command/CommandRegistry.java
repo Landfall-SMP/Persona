@@ -15,9 +15,12 @@ import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.data.CharacterProfile;
 import world.landfall.persona.registry.GlobalCharacterRegistry;
 import world.landfall.persona.registry.PersonaNetworking;
+import world.landfall.persona.registry.RegistryPersistence;
 
+import java.nio.file.Path;
 import java.util.UUID;
 import java.util.Optional;
+import java.util.Map;
 
 public class CommandRegistry {
 
@@ -49,6 +52,10 @@ public class CommandRegistry {
             .then(Commands.literal("rename")
                 .then(Commands.argument("newName", StringArgumentType.greedyString())
                     .executes(CommandRegistry::renameCharacter)))
+            .then(Commands.literal("debug")
+                .requires(source -> source.hasPermission(2)) // Requires permission level 2 (ops)
+                .then(Commands.literal("registry")
+                    .executes(CommandRegistry::debugRegistry)))
         );
     }
 
@@ -265,6 +272,57 @@ public class CommandRegistry {
         GlobalCharacterRegistry.registerCharacter(activeCharacterId, player.getUUID(), newName);
         
         sendSuccess(player, Component.translatable("command.persona.success.renamed", newName), false);
+        return 1;
+    }
+
+    private static int debugRegistry(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        Map<UUID, UUID> characterToPlayerMap = GlobalCharacterRegistry.getCharacterToPlayerMap();
+        Map<String, UUID> characterNameMap = GlobalCharacterRegistry.getCharacterNameMap();
+
+        source.sendSuccess(() -> Component.literal("=== Character Registry Debug ===")
+            .withStyle(style -> style.withColor(0x00FF00)), false);
+        
+        source.sendSuccess(() -> Component.literal("\nCharacter to Player Mappings:"), false);
+        if (characterToPlayerMap.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("  No character mappings found")
+                .withStyle(style -> style.withColor(0xFFAA00)), false);
+        } else {
+            characterToPlayerMap.forEach((charId, playerId) -> {
+                // Find character name
+                final String characterName = characterNameMap.entrySet().stream()
+                    .filter(entry -> entry.getValue().equals(charId))
+                    .map(Map.Entry::getKey)
+                    .findFirst()
+                    .orElse("Unknown");
+
+                source.sendSuccess(() -> Component.literal(String.format("  Character: %s (%s) -> Player: %s",
+                    characterName, charId.toString().substring(0, 8), playerId.toString().substring(0, 8)))
+                    .withStyle(style -> style.withColor(0xFFFFFF)), false);
+            });
+        }
+
+        source.sendSuccess(() -> Component.literal("\nCharacter Name Mappings:"), false);
+        if (characterNameMap.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("  No name mappings found")
+                .withStyle(style -> style.withColor(0xFFAA00)), false);
+        } else {
+            characterNameMap.forEach((name, charId) -> {
+                source.sendSuccess(() -> Component.literal(String.format("  Name: %s -> Character ID: %s",
+                    name, charId.toString().substring(0, 8)))
+                    .withStyle(style -> style.withColor(0xFFFFFF)), false);
+            });
+        }
+
+        // Show registry file location
+        Path registryPath = RegistryPersistence.getRegistryPath();
+        if (registryPath != null) {
+            source.sendSuccess(() -> Component.literal("\nRegistry File Location:")
+                .withStyle(style -> style.withColor(0x00FF00)), false);
+            source.sendSuccess(() -> Component.literal("  " + registryPath.toString())
+                .withStyle(style -> style.withColor(0xFFFFFF)), false);
+        }
+
         return 1;
     }
 
