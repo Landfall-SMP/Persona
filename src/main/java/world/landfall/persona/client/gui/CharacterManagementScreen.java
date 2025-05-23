@@ -5,8 +5,12 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.entity.player.Player;
+import net.neoforged.neoforge.common.NeoForge;
+import world.landfall.persona.client.event.CollectCharacterInfoEvent;
 import world.landfall.persona.config.Config;
+import world.landfall.persona.data.CharacterProfile;
 import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.data.PlayerCharacterCapability;
 import world.landfall.persona.registry.PersonaNetworking;
@@ -15,6 +19,7 @@ import world.landfall.persona.client.network.CharacterSyncManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 public class CharacterManagementScreen extends Screen {
     // UI Layout Constants
@@ -121,8 +126,8 @@ public class CharacterManagementScreen extends Screen {
         if (data == null) return;
         
         List<CharacterEntry> newList = new ArrayList<>();
-        data.getCharacters().forEach((id, character) -> 
-            newList.add(new CharacterEntry(id.toString(), character.getDisplayName()))
+        data.getCharacters().forEach((id, profile) ->
+            newList.add(new CharacterEntry(id, profile))
         );
         
         // Only update if the list has changed
@@ -165,7 +170,7 @@ public class CharacterManagementScreen extends Screen {
         for (int i = 0; i < visibleItems; i++) {
             CharacterEntry entry = characterList.get(i + scrollOffset);
             int y = listY + (i * Layout.LIST_ITEM_HEIGHT);
-            boolean isActiveCharacter = activeCharacterId != null && activeCharacterId.equals(entry.id);
+            boolean isActiveCharacter = activeCharacterId != null && activeCharacterId.equals(entry.id.toString());
             
             // switch
             Button switchButton = switchButtons.get(i);
@@ -226,10 +231,22 @@ public class CharacterManagementScreen extends Screen {
             int y = listY + (i * Layout.LIST_ITEM_HEIGHT);
             
             // Draw character name, green if selected
-            int nameColor = (activeCharacterId != null && activeCharacterId.equals(entry.id)) ? 
+            int nameColor = (activeCharacterId != null && activeCharacterId.equals(entry.id.toString())) ? 
                           Colors.ACTIVE_CHARACTER : Colors.TEXT_COLOR;
             if (font != null) {
-                graphics.drawString(font, entry.name, listX, y + Layout.NAME_Y_OFFSET, nameColor);
+                MutableComponent characterDisplayName = Component.literal(entry.profile.getDisplayName());
+                int currentX = listX;
+                graphics.drawString(font, characterDisplayName, currentX, y + Layout.NAME_Y_OFFSET, nameColor);
+                currentX += font.width(characterDisplayName) + 5; // Add some spacing after name
+
+                // Fire event and draw additional info
+                CollectCharacterInfoEvent event = new CollectCharacterInfoEvent(entry.profile);
+                NeoForge.EVENT_BUS.post(event);
+
+                for (Component infoComponent : event.getInfoComponents()) {
+                    graphics.drawString(font, infoComponent, currentX, y + Layout.NAME_Y_OFFSET, nameColor); // Use same nameColor for now, can be customized
+                    currentX += font.width(infoComponent) + 3; // Spacing between info components
+                }
             }
         }
     }
@@ -244,45 +261,37 @@ public class CharacterManagementScreen extends Screen {
             int index = switchButtons.indexOf(button);
             if (index >= 0 && index + scrollOffset < characterList.size()) {
                 CharacterEntry entry = characterList.get(index + scrollOffset);
-                PersonaNetworking.sendActionToServer(PersonaNetworking.Action.SWITCH, entry.name, true);
+                PersonaNetworking.sendActionToServer(PersonaNetworking.Action.SWITCH, entry.id.toString(), true);
                 if (minecraft != null) {
                     minecraft.getToasts().addToast(NotificationToast.success(
-                        Component.translatable("command.persona.success.switch", entry.name)
+                        Component.translatable("command.persona.success.switch", entry.profile.getDisplayName())
                     ));
                 }
-                requestSync();
             }
-        }).bounds(x, y, Layout.BUTTON_HEIGHT, Layout.BUTTON_HEIGHT).build();
+        }).bounds(x, y, Layout.LIST_ITEM_HEIGHT, Layout.BUTTON_HEIGHT).build();
     }
     
     @SuppressWarnings("null")
-    private Button createDeleteButton(int x, int y, String characterName) {
+    private Button createDeleteButton(int x, int y, String characterId) {
         return Button.builder(Component.literal("X"), button -> {
-            int index = deleteButtons.indexOf(button);
-            if (index >= 0 && index + scrollOffset < characterList.size()) {
-                CharacterEntry entryToDelete = characterList.get(index + scrollOffset);
-                
-                // Open ConfirmScreen
-                if (minecraft != null) {
+            if (minecraft != null) {
+                int index = deleteButtons.indexOf(button);
+                if (index >= 0 && index + scrollOffset < characterList.size()) {
+                    CharacterEntry entry = characterList.get(index + scrollOffset);
                     minecraft.setScreen(new ConfirmScreen(
-                        (confirmed) -> {
+                        confirmed -> {
                             if (confirmed) {
-                                PersonaNetworking.sendActionToServer(PersonaNetworking.Action.DELETE, entryToDelete.name, true);
-                                if (minecraft != null) {
-                                    minecraft.getToasts().addToast(NotificationToast.success(
-                                        Component.translatable("command.persona.success.delete", entryToDelete.name)
-                                    ));
-                                }
+                                PersonaNetworking.sendActionToServer(PersonaNetworking.Action.DELETE, entry.id.toString(), true);
                                 requestSync();
                             }
-                            minecraft.setScreen(CharacterManagementScreen.this); 
+                            minecraft.setScreen(this);
                         },
-                        Component.translatable("gui.persona.dialog.confirm_delete"),
-                        Component.translatable("gui.persona.dialog.confirm_delete_message", entryToDelete.name)
+                        Component.translatable("gui.persona.confirm_delete.title"),
+                        Component.translatable("gui.persona.confirm_delete.message", entry.profile.getDisplayName())
                     ));
                 }
             }
-        }).bounds(x, y, Layout.BUTTON_HEIGHT, Layout.BUTTON_HEIGHT).build();
+        }).bounds(x, y, Layout.LIST_ITEM_HEIGHT, Layout.BUTTON_HEIGHT).build();
     }
     
     private void requestSync() {
@@ -323,5 +332,5 @@ public class CharacterManagementScreen extends Screen {
         updateCharacterList();
     }
     
-    private record CharacterEntry(String id, String name) {}
+    private record CharacterEntry(UUID id, CharacterProfile profile) {}
 } 

@@ -14,12 +14,16 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import org.slf4j.Logger;
 import world.landfall.persona.command.CommandRegistry;
 import world.landfall.persona.config.Config;
 import world.landfall.persona.data.CharacterProfile;
 import world.landfall.persona.registry.GlobalCharacterRegistry;
 import world.landfall.persona.util.NameListManager;
+import world.landfall.persona.registry.PersonaNetworking;
+import net.minecraft.server.level.ServerPlayer;
+import world.landfall.persona.features.aging.AgingClientEvents;
 
 @Mod(Persona.MODID)
 public class Persona {
@@ -32,6 +36,7 @@ public class Persona {
         modContainer.registerConfig(ModConfig.Type.SERVER, Config.SPEC);
 
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
+        NeoForge.EVENT_BUS.addListener(this::onPlayerLoggedIn);
 
         // Initialize name lists
         NameListManager.init();
@@ -57,11 +62,18 @@ public class Persona {
         LOGGER.info("[Persona] Commands registered.");
     }
 
+    public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer serverPlayer) {
+            PersonaNetworking.sendServerConfigToPlayer(serverPlayer);
+        }
+    }
+
     @EventBusSubscriber(modid = MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static class ClientModEvents {
         @SubscribeEvent
         public static void onClientSetup(FMLClientSetupEvent event) {
             LOGGER.info("[Persona] Client setup complete for {}", Minecraft.getInstance().getUser().getName());
+            NeoForge.EVENT_BUS.addListener(AgingClientEvents::onCollectCharacterInfo);
         }
     }
 }

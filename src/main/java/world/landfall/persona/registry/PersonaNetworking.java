@@ -16,7 +16,12 @@ import world.landfall.persona.Persona;
 import world.landfall.persona.command.CommandRegistry;
 import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.data.PlayerCharacterCapability;
+import world.landfall.persona.config.Config;
+import world.landfall.persona.config.ClientSyncedConfig;
+import net.minecraft.nbt.CompoundTag;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @EventBusSubscriber(modid = Persona.MODID, bus = EventBusSubscriber.Bus.MOD)
@@ -26,18 +31,24 @@ public class PersonaNetworking {
     private static final ResourceLocation ACTION_ID = ResourceLocation.tryParse(Persona.MODID + ":character_action");
     private static final ResourceLocation SYNC_REQUEST_ID = ResourceLocation.tryParse(Persona.MODID + ":sync_request");
     private static final ResourceLocation CREATION_RESPONSE_ID = ResourceLocation.tryParse(Persona.MODID + ":creation_response");
+    private static final ResourceLocation CREATE_WITH_MODDATA_ID = ResourceLocation.tryParse(Persona.MODID + ":create_with_moddata");
+    private static final ResourceLocation SERVER_CONFIG_SYNC_ID = ResourceLocation.tryParse(Persona.MODID + ":server_config_sync");
     
     private static CustomPacketPayload.Type<SyncToClientPayload> SYNC_TO_CLIENT_TYPE = null;
     private static CustomPacketPayload.Type<SyncToServerPayload> SYNC_TO_SERVER_TYPE = null;
     private static CustomPacketPayload.Type<CharacterActionPayload> ACTION_PACKET_TYPE = null;
     private static CustomPacketPayload.Type<SyncRequestPayload> SYNC_REQUEST_TYPE = null;
     private static CustomPacketPayload.Type<CharacterCreationResponsePayload> CREATION_RESPONSE_TYPE = null;
+    private static CustomPacketPayload.Type<CharacterCreateWithModDataPayload> CREATE_WITH_MODDATA_TYPE = null;
+    private static CustomPacketPayload.Type<ServerConfigSyncPayload> SERVER_CONFIG_SYNC_TYPE = null;
     
     private static StreamCodec<RegistryFriendlyByteBuf, SyncToClientPayload> SYNC_TO_CLIENT_CODEC = null;
     private static StreamCodec<RegistryFriendlyByteBuf, SyncToServerPayload> SYNC_TO_SERVER_CODEC = null;
     private static StreamCodec<RegistryFriendlyByteBuf, CharacterActionPayload> ACTION_PACKET_CODEC = null;
     private static StreamCodec<RegistryFriendlyByteBuf, SyncRequestPayload> SYNC_REQUEST_CODEC = null;
     private static StreamCodec<RegistryFriendlyByteBuf, CharacterCreationResponsePayload> CREATION_RESPONSE_CODEC = null;
+    private static StreamCodec<RegistryFriendlyByteBuf, CharacterCreateWithModDataPayload> CREATE_WITH_MODDATA_CODEC = null;
+    private static StreamCodec<RegistryFriendlyByteBuf, ServerConfigSyncPayload> SERVER_CONFIG_SYNC_CODEC = null;
     
     public enum Action {
         CREATE,
@@ -47,7 +58,8 @@ public class PersonaNetworking {
     
     @SubscribeEvent
     public static void registerPayloadHandlers(RegisterPayloadHandlersEvent event) {
-        if (SYNC_TO_CLIENT_TYPE != null || SYNC_TO_SERVER_TYPE != null || ACTION_PACKET_TYPE != null || CREATION_RESPONSE_TYPE != null) {
+        if (SYNC_TO_CLIENT_TYPE != null || SYNC_TO_SERVER_TYPE != null || ACTION_PACKET_TYPE != null || 
+            CREATION_RESPONSE_TYPE != null || CREATE_WITH_MODDATA_TYPE != null || SERVER_CONFIG_SYNC_TYPE != null) {
             Persona.LOGGER.warn("[Persona] Attempted to register payload handlers more than once. Skipping.");
             return;
         }
@@ -79,6 +91,14 @@ public class PersonaNetworking {
             );
             registrar.playToServer(ACTION_PACKET_TYPE, ACTION_PACKET_CODEC, CharacterActionPayload.Handler::handleServerPacket);
             
+            // Register create with modData packet
+            CREATE_WITH_MODDATA_TYPE = new CustomPacketPayload.Type<>(CREATE_WITH_MODDATA_ID);
+            CREATE_WITH_MODDATA_CODEC = StreamCodec.of(
+                (buf, payload) -> payload.write(buf),
+                CharacterCreateWithModDataPayload::new
+            );
+            registrar.playToServer(CREATE_WITH_MODDATA_TYPE, CREATE_WITH_MODDATA_CODEC, CharacterCreateWithModDataPayload.Handler::handleServerPacket);
+            
             // Register sync request packet
             SYNC_REQUEST_TYPE = new CustomPacketPayload.Type<>(SYNC_REQUEST_ID);
             SYNC_REQUEST_CODEC = StreamCodec.of(
@@ -95,6 +115,14 @@ public class PersonaNetworking {
             );
             registrar.playToClient(CREATION_RESPONSE_TYPE, CREATION_RESPONSE_CODEC, CharacterCreationResponsePayload.Handler::handleClientPacket);
             
+            // Register server config sync packet (Server to Client)
+            SERVER_CONFIG_SYNC_TYPE = new CustomPacketPayload.Type<>(SERVER_CONFIG_SYNC_ID);
+            SERVER_CONFIG_SYNC_CODEC = StreamCodec.of(
+                (buf, payload) -> payload.write(buf),
+                ServerConfigSyncPayload::new
+            );
+            registrar.playToClient(SERVER_CONFIG_SYNC_TYPE, SERVER_CONFIG_SYNC_CODEC, ServerConfigSyncPayload.Handler::handleClientPacket);
+            
             Persona.LOGGER.info("[Persona] Payload handlers registered successfully.");
         } catch (Exception e) {
             Persona.LOGGER.error("[Persona] Failed to register payload handlers", e);
@@ -108,6 +136,10 @@ public class PersonaNetworking {
             SYNC_REQUEST_CODEC = null;
             CREATION_RESPONSE_TYPE = null;
             CREATION_RESPONSE_CODEC = null;
+            CREATE_WITH_MODDATA_TYPE = null;
+            CREATE_WITH_MODDATA_CODEC = null;
+            SERVER_CONFIG_SYNC_TYPE = null;
+            SERVER_CONFIG_SYNC_CODEC = null;
         }
     }
     
@@ -172,14 +204,15 @@ public class PersonaNetworking {
         }
     }
     
-    public static record CharacterActionPayload(Action action, String data, boolean fromGui) implements CustomPacketPayload {
+    public static record CharacterActionPayload(Action action, String data, int startingAge, boolean fromGui) implements CustomPacketPayload {
         public CharacterActionPayload(RegistryFriendlyByteBuf buf) {
-            this(Action.values()[buf.readByte()], buf.readUtf(), buf.readBoolean());
+            this(Action.values()[buf.readByte()], buf.readUtf(), buf.readInt(), buf.readBoolean());
         }
         
         public void write(FriendlyByteBuf buf) {
             buf.writeByte(action.ordinal());
             buf.writeUtf(data);
+            buf.writeInt(startingAge);
             buf.writeBoolean(fromGui);
         }
         
@@ -200,7 +233,8 @@ public class PersonaNetworking {
                                 try {
                                     CommandRegistry.createCharacter(serverPlayer, payload.data(), payload.fromGui());
                                 } catch (Exception e) {
-                                    Persona.LOGGER.error("[Persona] Failed to create character", e);
+                                    Persona.LOGGER.error("[Persona] Failed to create character via network action", e);
+                                    PersonaNetworking.sendCreationResponseToPlayer(serverPlayer, false, "gui.persona.error.generic_creation_fail");
                                 }
                             }
                             case SWITCH -> {
@@ -304,10 +338,14 @@ public class PersonaNetworking {
     }
     
     public static void sendActionToServer(Action action, String data, boolean fromGui) {
+        sendActionToServer(action, data, -1, fromGui);
+    }
+    
+    public static void sendActionToServer(Action action, String data, int startingAge, boolean fromGui) {
         if (ACTION_PACKET_TYPE == null || ACTION_PACKET_CODEC == null) {
             throw new IllegalStateException("Attempted to send action packet before packet types were initialized");
         }
-        PacketDistributor.sendToServer(new CharacterActionPayload(action, data, fromGui));
+        PacketDistributor.sendToServer(new CharacterActionPayload(action, data, startingAge, fromGui));
     }
     
     /**
@@ -328,5 +366,121 @@ public class PersonaNetworking {
             return;
         }
         PacketDistributor.sendToPlayer(player, new CharacterCreationResponsePayload(success, messageKey, messageArgs));
+    }
+
+    // New payload for character creation with modData
+    public static record CharacterCreateWithModDataPayload(String characterName, Map<ResourceLocation, CompoundTag> modData, boolean fromGui) implements CustomPacketPayload {
+        public CharacterCreateWithModDataPayload(RegistryFriendlyByteBuf buf) {
+            this(
+                buf.readUtf(),
+                readModDataMap(buf),
+                buf.readBoolean()
+            );
+        }
+        
+        private static Map<ResourceLocation, CompoundTag> readModDataMap(RegistryFriendlyByteBuf buf) {
+            int size = buf.readVarInt();
+            Map<ResourceLocation, CompoundTag> modData = new HashMap<>(size);
+            
+            for (int i = 0; i < size; i++) {
+                ResourceLocation key = buf.readResourceLocation();
+                CompoundTag value = buf.readNbt();
+                if (value != null) {
+                    modData.put(key, value);
+                }
+            }
+            
+            return modData;
+        }
+        
+        public void write(FriendlyByteBuf buf) {
+            buf.writeUtf(characterName);
+            
+            // Write modData
+            buf.writeVarInt(modData.size());
+            modData.forEach((key, value) -> {
+                buf.writeResourceLocation(key);
+                buf.writeNbt(value);
+            });
+            
+            buf.writeBoolean(fromGui);
+        }
+        
+        @Override
+        public Type<CharacterCreateWithModDataPayload> type() {
+            if (CREATE_WITH_MODDATA_TYPE == null) {
+                throw new IllegalStateException("Attempted to use CREATE_WITH_MODDATA_TYPE before it was initialized");
+            }
+            return CREATE_WITH_MODDATA_TYPE;
+        }
+
+        public static class Handler {
+            public static void handleServerPacket(final CharacterCreateWithModDataPayload payload, final IPayloadContext context) {
+                Optional.ofNullable(context.player()).ifPresent(player -> {
+                    if (player instanceof ServerPlayer serverPlayer) {
+                        try {
+                            CommandRegistry.createCharacter(serverPlayer, payload.characterName(), payload.fromGui(), payload.modData());
+                        } catch (Exception e) {
+                            Persona.LOGGER.error("[Persona] Failed to create character with modData", e);
+                            // Send failure response
+                            PersonaNetworking.sendCreationResponseToPlayer(serverPlayer, false, "gui.persona.error.generic_creation_fail");
+                        }
+                    }
+                });
+            }
+        }
+    }
+    
+    /**
+     * Sends a character creation request with modData from input providers.
+     * @param characterName The name of the character to create
+     * @param modData A map of ResourceLocation to CompoundTag containing provider-specific data
+     * @param fromGui Whether this request came from the GUI
+     */
+    public static void sendCreateWithModData(String characterName, Map<ResourceLocation, CompoundTag> modData, boolean fromGui) {
+        if (CREATE_WITH_MODDATA_TYPE == null || CREATE_WITH_MODDATA_CODEC == null) {
+            throw new IllegalStateException("Attempted to send createWithModData packet before packet types were initialized");
+        }
+        PacketDistributor.sendToServer(new CharacterCreateWithModDataPayload(characterName, modData, fromGui));
+    }
+
+    // New payload for server config sync
+    public static record ServerConfigSyncPayload(boolean isAgingEnabled) implements CustomPacketPayload {
+        public ServerConfigSyncPayload(RegistryFriendlyByteBuf buf) {
+            this(buf.readBoolean());
+        }
+        
+        public void write(FriendlyByteBuf buf) {
+            buf.writeBoolean(isAgingEnabled);
+        }
+        
+        @Override
+        public Type<ServerConfigSyncPayload> type() {
+            if (SERVER_CONFIG_SYNC_TYPE == null) {
+                throw new IllegalStateException("Attempted to use SERVER_CONFIG_SYNC_TYPE before it was initialized");
+            }
+            return SERVER_CONFIG_SYNC_TYPE;
+        }
+
+        public static class Handler {
+            public static void handleClientPacket(final ServerConfigSyncPayload payload, final IPayloadContext context) {
+                context.enqueueWork(() -> {
+                    ClientSyncedConfig.updateAgingSystemStatus(payload.isAgingEnabled());
+                });
+            }
+        }
+    }
+
+    /**
+     * Sends the server config to a specific player, typically on login.
+     * @param player The player to send the config to.
+     */
+    public static void sendServerConfigToPlayer(ServerPlayer player) {
+        if (SERVER_CONFIG_SYNC_TYPE == null) {
+            Persona.LOGGER.error("[Persona] Cannot send server config, network not initialized");
+            return;
+        }
+        boolean agingEnabled = Config.ENABLE_AGING_SYSTEM.get();
+        PacketDistributor.sendToPlayer(player, new ServerConfigSyncPayload(agingEnabled));
     }
 } 

@@ -16,6 +16,13 @@ public class Config {
     public static final ModConfigSpec.BooleanValue SHOW_USERNAME_IN_TABLIST;
     public static final ModConfigSpec.ConfigValue<String> TABLIST_NAME_COLOR;
 
+    // Aging System Settings
+    public static final ModConfigSpec.BooleanValue ENABLE_AGING_SYSTEM;
+    public static final ModConfigSpec.DoubleValue TIME_PASSING_RATIO;
+    public static final ModConfigSpec.DoubleValue MIN_CHARACTER_AGE;
+    public static final ModConfigSpec.DoubleValue MAX_CHARACTER_AGE;
+    public static final ModConfigSpec.DoubleValue DEFAULT_CHARACTER_AGE;
+
     static {
         // General Settings Section
         BUILDER.push("General Settings");
@@ -50,6 +57,36 @@ public class Config {
             .define("tablistNameColor", "e");
 
         BUILDER.pop(); // End Display Name System
+        
+        // Aging System Settings
+        BUILDER.push("Aging System");
+
+        ENABLE_AGING_SYSTEM = BUILDER
+            .comment("Master toggle for the character aging system. If false, characters won't age and the age input field won't appear.")
+            .define("enableAgingSystem", true);
+
+        TIME_PASSING_RATIO = BUILDER
+            .comment("Determines how many real-life days equal one game year for characters.",
+                    "For example, a value of 1.0 means 1 real-life day = 1 game year.",
+                    "A value of 24.0 means 24 real-life days = 1 game year.")
+            .defineInRange("timePassingRatio", 24.0, 0.1, 1000.0);
+
+        MIN_CHARACTER_AGE = BUILDER
+            .comment("Minimum allowed age (in game years) for character creation.",
+                    "Characters cannot be created younger than this.")
+            .defineInRange("minCharacterAge", 16.0, 0.0, 1000.0);
+
+        MAX_CHARACTER_AGE = BUILDER
+            .comment("Maximum allowed age (in game years) for character creation.",
+                    "Characters cannot be created older than this.")
+            .defineInRange("maxCharacterAge", 100.0, 1.0, 10000.0);
+
+        DEFAULT_CHARACTER_AGE = BUILDER
+            .comment("Default age (in game years) for new characters when no age is specified.",
+                    "Must be between minCharacterAge and maxCharacterAge.")
+            .defineInRange("defaultCharacterAge", 20.0, 0.0, 10000.0);
+
+        BUILDER.pop(); // End Aging System
         
         SPEC = BUILDER.build();
     }
