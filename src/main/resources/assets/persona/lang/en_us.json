@@ -57,5 +57,9 @@
   "command.persona.error.no_active_char": "You do not have an active character selected.",
   "command.persona.error.active_char_not_found": "Your active character profile could not be found. Please report this!",
   "command.persona.success.renamed": "Active character renamed to '%s'.",
-  "command.persona.error.generic_error": "An unexpected error occurred."
+  "command.persona.error.generic_error": "An unexpected error occurred.",
+  "command.persona.error.char_is_deceased": "Character '%s' is deceased and cannot be switched to.",
+  "command.persona.debug.success.setdeceased": "Set deceased status for character '%s' to '%s'.",
+  "command.persona.info.auto_switched_deceased": "Your active character '%s' became deceased. You have been switched to '%s'.",
+  "command.persona.info.auto_switched_deceased_no_available": "Your active character '%s' became deceased. No other available characters to switch to, please create a new character to continue."
 }

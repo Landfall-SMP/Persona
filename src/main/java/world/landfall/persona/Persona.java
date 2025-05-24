@@ -19,6 +19,8 @@ import org.slf4j.Logger;
 import world.landfall.persona.command.CommandRegistry;
 import world.landfall.persona.config.Config;
 import world.landfall.persona.data.CharacterProfile;
+import world.landfall.persona.features.figura.FiguraReflector;
+import world.landfall.persona.features.figura.FiguraClientEventListener;
 import world.landfall.persona.registry.GlobalCharacterRegistry;
 import world.landfall.persona.util.NameListManager;
 import world.landfall.persona.registry.PersonaNetworking;
@@ -74,6 +76,16 @@ public class Persona {
         public static void onClientSetup(FMLClientSetupEvent event) {
             LOGGER.info("[Persona] Client setup complete for {}", Minecraft.getInstance().getUser().getName());
             NeoForge.EVENT_BUS.addListener(AgingClientEvents::onCollectCharacterInfo);
+
+            event.enqueueWork(() -> {
+                if (FiguraReflector.isFiguraAvailable()) {
+                    Persona.LOGGER.info("[Persona-Figura] Figura integration is active. Registering event listener for ClientPersonaSwitchedEvent.");
+                    // Register FiguraClientEventListener to the game event bus to catch ClientPersonaSwitchedEvent
+                    NeoForge.EVENT_BUS.register(FiguraClientEventListener.class); 
+                } else {
+                    Persona.LOGGER.info("[Persona-Figura] Figura integration is disabled (Figura mod not found).");
+                }
+            });
         }
     }
 }

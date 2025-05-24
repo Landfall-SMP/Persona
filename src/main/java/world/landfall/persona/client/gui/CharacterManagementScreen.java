@@ -15,6 +15,8 @@ import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.data.PlayerCharacterCapability;
 import world.landfall.persona.registry.PersonaNetworking;
 import world.landfall.persona.client.network.CharacterSyncManager;
+import net.minecraft.ChatFormatting;
+import world.landfall.persona.features.figura.event.ClientPersonaSwitchedEvent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +57,7 @@ public class CharacterManagementScreen extends Screen {
         static final int SCROLLBAR_THUMB = 0xFFBBBBBB;
         static final int TEXT_COLOR = 0xFFFFFF;
         static final int ACTIVE_CHARACTER = 0x00FF00;
+        static final int DECEASED_CHARACTER = 0x808080;
         static final int SWITCH_BUTTON = 0x66CCFF;
         static final int DELETE_BUTTON = 0xFF0000;
         static final int CREATE_BUTTON = 0x00FF00;
@@ -171,6 +174,7 @@ public class CharacterManagementScreen extends Screen {
             CharacterEntry entry = characterList.get(i + scrollOffset);
             int y = listY + (i * Layout.LIST_ITEM_HEIGHT);
             boolean isActiveCharacter = activeCharacterId != null && activeCharacterId.equals(entry.id.toString());
+            boolean isDeceased = entry.profile.isDeceased();
             
             // switch
             Button switchButton = switchButtons.get(i);
@@ -179,8 +183,8 @@ public class CharacterManagementScreen extends Screen {
                             listX + Layout.SWITCH_BUTTON_X_WITHOUT_DELETE);
             switchButton.setY(y + Layout.BUTTON_Y_OFFSET);
             switchButton.setMessage(Component.literal("🔀"));
-            switchButton.visible = !isActiveCharacter;
-            switchButton.active = !isActiveCharacter;
+            switchButton.visible = !isActiveCharacter && !isDeceased;
+            switchButton.active = !isActiveCharacter && !isDeceased;
             
             // delete
             if (Config.ENABLE_CHARACTER_DELETION.get()) {
@@ -232,9 +236,16 @@ public class CharacterManagementScreen extends Screen {
             
             // Draw character name, green if selected
             int nameColor = (activeCharacterId != null && activeCharacterId.equals(entry.id.toString())) ? 
-                          Colors.ACTIVE_CHARACTER : Colors.TEXT_COLOR;
+                          Colors.ACTIVE_CHARACTER : 
+                          (entry.profile.isDeceased() ? Colors.DECEASED_CHARACTER : Colors.TEXT_COLOR);
             if (font != null) {
-                MutableComponent characterDisplayName = Component.literal(entry.profile.getDisplayName());
+                MutableComponent characterDisplayName;
+                if (entry.profile.isDeceased()) {
+                    MutableComponent skullIcon = Component.literal("☠ ").withStyle(ChatFormatting.RED);
+                    characterDisplayName = skullIcon.append(Component.literal(entry.profile.getDisplayName()));
+                } else {
+                    characterDisplayName = Component.literal(entry.profile.getDisplayName());
+                }
                 int currentX = listX;
                 graphics.drawString(font, characterDisplayName, currentX, y + Layout.NAME_Y_OFFSET, nameColor);
                 currentX += font.width(characterDisplayName) + 5; // Add some spacing after name
@@ -261,11 +272,16 @@ public class CharacterManagementScreen extends Screen {
             int index = switchButtons.indexOf(button);
             if (index >= 0 && index + scrollOffset < characterList.size()) {
                 CharacterEntry entry = characterList.get(index + scrollOffset);
+                if (entry.profile.isDeceased()) {
+                    return;
+                }
                 PersonaNetworking.sendActionToServer(PersonaNetworking.Action.SWITCH, entry.id.toString(), true);
                 if (minecraft != null) {
                     minecraft.getToasts().addToast(NotificationToast.success(
                         Component.translatable("command.persona.success.switch", entry.profile.getDisplayName())
                     ));
+                    // Fire the ClientPersonaSwitchedEvent after successful switch
+                    NeoForge.EVENT_BUS.post(new ClientPersonaSwitchedEvent(entry.profile.getDisplayName()));
                 }
             }
         }).bounds(x, y, Layout.LIST_ITEM_HEIGHT, Layout.BUTTON_HEIGHT).build();

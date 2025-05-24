@@ -19,6 +19,10 @@ import world.landfall.persona.registry.RegistryPersistence;
 import world.landfall.persona.features.aging.AgingManager;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.nbt.Tag;
+import com.mojang.brigadier.arguments.BoolArgumentType;
+import world.landfall.persona.util.CharacterUtils;
+import world.landfall.persona.features.figura.event.ClientPersonaSwitchedEvent;
+import net.neoforged.neoforge.common.NeoForge;
 
 import java.nio.file.Path;
 import java.util.UUID;
@@ -68,7 +72,11 @@ public class CommandRegistry {
                     .executes(CommandRegistry::debugCharacterData)))
             .then(Commands.literal("ageinfo")
                 .then(Commands.argument("characterNameOrUUID", StringArgumentType.string())
-                    .executes(CommandRegistry::debugAgeInfo)));
+                    .executes(CommandRegistry::debugAgeInfo)))
+            .then(Commands.literal("setdeceased")
+                .then(Commands.argument("characterNameOrUUID", StringArgumentType.string())
+                    .then(Commands.argument("isDeceased", BoolArgumentType.bool())
+                        .executes(CommandRegistry::debugSetDeceased))));
         
         personaCommand.then(debugCommand); // Nest debug under persona
 
@@ -134,6 +142,12 @@ public class CommandRegistry {
 
         if (targetProfile == null) { 
             sendError(player, Component.translatable("command.persona.error.char_not_found_or_not_yours", nameOrUUID), false);
+            return 0;
+        }
+
+        // Check if the character is deceased
+        if (targetProfile.isDeceased()) {
+            sendError(player, Component.translatable("command.persona.error.char_is_deceased", targetProfile.getDisplayName()), false);
             return 0;
         }
 
@@ -586,6 +600,12 @@ public class CommandRegistry {
             return;
         }
 
+        // Check if the character is deceased
+        if (targetProfile.isDeceased()) {
+            sendError(player, Component.translatable("command.persona.error.char_is_deceased", targetProfile.getDisplayName()), fromGui);
+            return;
+        }
+
         UUID oldActiveCharacterId = characterData.getActiveCharacterId();
 
         if (foundCharacterId.equals(oldActiveCharacterId)) {
@@ -608,6 +628,9 @@ public class CommandRegistry {
         PersonaNetworking.sendToPlayer(characterData, player);
         sendSuccess(player, Component.translatable("command.persona.success.switch", targetProfile.getDisplayName()), fromGui);
         if (fromGui) PersonaNetworking.sendCreationResponseToPlayer(player, true, "command.persona.success.switch", targetProfile.getDisplayName());
+        
+        // Note: ClientPersonaSwitchedEvent should be fired on the client side when receiving server data updates
+        // This happens automatically through the existing networking/GUI systems
     }
 
     public static void deleteCharacter(ServerPlayer player, String nameOrUUID) {
@@ -717,7 +740,6 @@ public class CommandRegistry {
 
         CharacterProfile profile = findCharacterProfile(nameOrUUID, characterData, player);
         if (profile == null) {
-            // findCharacterProfile already sends an error message
             return 0;
         }
 
@@ -809,5 +831,34 @@ public class CommandRegistry {
             return null;
         }
         return profile;
+    }
+
+    // debug set deceased cmd
+    private static int debugSetDeceased(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        String nameOrUUID = StringArgumentType.getString(context, "characterNameOrUUID");
+        boolean isDeceased = BoolArgumentType.getBool(context, "isDeceased");
+
+        PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
+        if (characterData == null) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.data_not_found"));
+            return 0;
+        }
+
+        CharacterProfile profile = findCharacterProfile(nameOrUUID, characterData, player);
+        if (profile == null) {
+            return 0;
+        }
+
+        // Use the utility method to handle deceased status change with automatic switching
+        boolean success = CharacterUtils.setCharacterDeceased(player, profile.getId(), isDeceased);
+        
+        if (success) {
+            context.getSource().sendSuccess(() -> Component.translatable("command.persona.debug.success.setdeceased", profile.getDisplayName(), isDeceased), false);
+            return 1;
+        } else {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.generic_error"));
+            return 0;
+        }
     }
 } 

@@ -4,6 +4,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import world.landfall.persona.config.Config;
+import world.landfall.persona.Persona;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -13,6 +14,8 @@ import java.util.regex.PatternSyntaxException;
 
 public class CharacterProfile {
     private static Pattern NAME_PATTERN = null; // Will be initialized from config
+    private static final ResourceLocation IS_DECEASED_KEY = ResourceLocation.fromNamespaceAndPath(Persona.MODID, "is_deceased"); // Key for modData
+
     private final UUID id;
     private String displayName;
     private final Map<ResourceLocation, CompoundTag> modData;
@@ -25,12 +28,20 @@ public class CharacterProfile {
         this.id = id;
         setDisplayName(displayName, true); // Validate on creation
         this.modData = new HashMap<>();
+        // Initialize isDeceased in modData
+        CompoundTag deceasedTag = new CompoundTag();
+        deceasedTag.putBoolean("value", false);
+        this.modData.put(IS_DECEASED_KEY, deceasedTag);
     }
 
     private CharacterProfile(UUID id, String displayName, boolean skipValidation) {
         this.id = id;
         setDisplayName(displayName, skipValidation);
         this.modData = new HashMap<>();
+        // Initialize isDeceased in modData
+        CompoundTag deceasedTag = new CompoundTag();
+        deceasedTag.putBoolean("value", false);
+        this.modData.put(IS_DECEASED_KEY, deceasedTag);
     }
 
     public UUID getId() {
@@ -93,6 +104,20 @@ public class CharacterProfile {
 
     public void removeModData(ResourceLocation modId) {
         modData.remove(modId);
+    }
+
+    public boolean isDeceased() {
+        CompoundTag deceasedTag = modData.get(IS_DECEASED_KEY);
+        if (deceasedTag != null && deceasedTag.contains("value")) {
+            return deceasedTag.getBoolean("value");
+        }
+        return false; // Default to false if not found or malformed
+    }
+
+    public void setDeceased(boolean deceased) {
+        CompoundTag deceasedTag = new CompoundTag();
+        deceasedTag.putBoolean("value", deceased);
+        modData.put(IS_DECEASED_KEY, deceasedTag);
     }
 
     public CompoundTag serialize() {
