@@ -21,8 +21,6 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.nbt.Tag;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import world.landfall.persona.util.CharacterUtils;
-import world.landfall.persona.features.figura.event.ClientPersonaSwitchedEvent;
-import net.neoforged.neoforge.common.NeoForge;
 
 import java.nio.file.Path;
 import java.util.UUID;
@@ -418,14 +416,23 @@ public class CommandRegistry {
 
         // If it's the active character, force switch to another character first
         if (foundCharacterId.equals(characterData.getActiveCharacterId())) {
+            UUID oldActiveCharacterId = characterData.getActiveCharacterId();
             Optional<UUID> newActiveId = characterData.getCharacters().keySet().stream()
                 .filter(id -> !id.equals(foundCharacterId))
                 .findFirst();
             
             if (newActiveId.isPresent()) {
                 characterData.setActiveCharacterId(newActiveId.get());
+                // Fire CharacterSwitchEvent to ensure display name is applied
+                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
+                    new world.landfall.persona.registry.PersonaEvents.CharacterSwitchEvent(targetPlayer, oldActiveCharacterId, newActiveId.get())
+                );
             } else {
                 characterData.setActiveCharacterId(null);
+                // Fire CharacterSwitchEvent for switching to no active character
+                net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
+                    new world.landfall.persona.registry.PersonaEvents.CharacterSwitchEvent(targetPlayer, oldActiveCharacterId, null)
+                );
             }
         }
 
@@ -560,8 +567,15 @@ public class CommandRegistry {
 
         String successKey;
         if (characterData.getActiveCharacterId() == null) {
+            UUID oldActiveCharacterId = characterData.getActiveCharacterId(); // This will be null
             characterData.setActiveCharacterId(newProfile.getId());
             successKey = "command.persona.success.create_set_active";
+            
+            // Fire CharacterSwitchEvent to ensure display name is applied immediately
+            Persona.LOGGER.info("[Persona] Posting CharacterSwitchEvent for newly created character: {}", displayName);
+            net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
+                new world.landfall.persona.registry.PersonaEvents.CharacterSwitchEvent(player, oldActiveCharacterId, newProfile.getId())
+            );
         } else {
             successKey = "command.persona.success.create";
         }
