@@ -21,12 +21,16 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.nbt.Tag;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import world.landfall.persona.util.CharacterUtils;
+import net.neoforged.neoforge.common.NeoForge;
+import world.landfall.persona.registry.PersonaEvents;
 
 import java.nio.file.Path;
 import java.util.UUID;
 import java.util.Optional;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.nbt.CompoundTag;
 
@@ -110,67 +114,9 @@ public class CommandRegistry {
     private static int switchCharacter(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = context.getSource().getPlayerOrException();
         String nameOrUUID = StringArgumentType.getString(context, "characterNameOrUUID");
-
-        PlayerCharacterData characterData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
-        if (characterData == null) {
-            sendError(player, Component.translatable("command.persona.error.data_not_found"), false);
-            return 0;
-        }
-
-        UUID foundCharacterId = null;
-        try {
-            foundCharacterId = UUID.fromString(nameOrUUID);
-        } catch (IllegalArgumentException e) {
-            // Not a UUID, try to find by display name
-            for (CharacterProfile profile : characterData.getCharacters().values()) {
-                if (profile.getDisplayName().equalsIgnoreCase(nameOrUUID)) {
-                    foundCharacterId = profile.getId();
-                    break;
-                }
-            }
-        }
-
-        if (foundCharacterId == null) {
-            sendError(player, Component.translatable("command.persona.error.not_found", nameOrUUID), false);
-            return 0;
-        }
-
-        final UUID targetCharacterId = foundCharacterId; // Make it effectively final for lambda
-        CharacterProfile targetProfile = characterData.getCharacter(targetCharacterId);
-
-        if (targetProfile == null) { 
-            sendError(player, Component.translatable("command.persona.error.char_not_found_or_not_yours", nameOrUUID), false);
-            return 0;
-        }
-
-        // Check if the character is deceased
-        if (targetProfile.isDeceased()) {
-            sendError(player, Component.translatable("command.persona.error.char_is_deceased", targetProfile.getDisplayName()), false);
-            return 0;
-        }
-
-        UUID oldActiveCharacterId = characterData.getActiveCharacterId(); // Get the old active ID *before* changing it
-
-        if (targetCharacterId.equals(oldActiveCharacterId)){
-            sendError(player, Component.translatable("command.persona.error.already_active", targetProfile.getDisplayName()), false);
-            return 0;
-        }
-
-        // Update active character ID in data
-        characterData.setActiveCharacterId(targetCharacterId); 
-
-        // Post the event
-        Persona.LOGGER.info("[Persona] Posting CharacterSwitchEvent for player: {}, from: {}, to: {}", 
-            player.getName().getString(), 
-            (oldActiveCharacterId != null ? oldActiveCharacterId.toString() : "null"), 
-            targetCharacterId.toString());
-            
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
-            new world.landfall.persona.registry.PersonaEvents.CharacterSwitchEvent(player, oldActiveCharacterId, targetCharacterId)
-        );
-        Persona.LOGGER.info("[Persona] CharacterSwitchEvent was posted.");
-
-        sendSuccess(player, Component.translatable("command.persona.success.switch", targetProfile.getDisplayName()), false);
+        
+        // Use the public method that has all the proper event firing
+        switchCharacter(player, nameOrUUID, false);
         return 1;
     }
 
@@ -245,6 +191,15 @@ public class CommandRegistry {
         // Check if trying to delete active character
         if (foundCharacterId.equals(characterData.getActiveCharacterId())) {
             sendError(player, Component.translatable("command.persona.error.delete_active"), false);
+            return 0;
+        }
+
+        // Fire the CharacterDeleteEvent before deletion
+        PersonaEvents.CharacterDeleteEvent deleteEvent = new PersonaEvents.CharacterDeleteEvent(player, foundCharacterId);
+        NeoForge.EVENT_BUS.post(deleteEvent);
+        
+        // If the event was cancelled, don't proceed with deletion
+        if (deleteEvent.isCanceled()) {
             return 0;
         }
 
@@ -565,6 +520,13 @@ public class CommandRegistry {
         characterData.addCharacter(newProfile.getId(), newProfile);
         GlobalCharacterRegistry.registerCharacter(newProfile.getId(), player.getUUID(), newProfile.getDisplayName());
 
+        // Fire the CharacterCreateEvent
+        Persona.LOGGER.info("[Persona] Posting CharacterCreateEvent for player: {}, character: {}", 
+            player.getName().getString(), newProfile.getDisplayName());
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
+            new world.landfall.persona.registry.PersonaEvents.CharacterCreateEvent(player, newProfile.getId(), newProfile)
+        );
+
         String successKey;
         if (characterData.getActiveCharacterId() == null) {
             UUID oldActiveCharacterId = characterData.getActiveCharacterId(); // This will be null
@@ -628,6 +590,29 @@ public class CommandRegistry {
             return;
         }
 
+        // Fire the CharacterPreSwitchEvent with async gate
+        world.landfall.persona.registry.PersonaEvents.CharacterPreSwitchEvent preSwitchEvent = 
+            new world.landfall.persona.registry.PersonaEvents.CharacterPreSwitchEvent(player, oldActiveCharacterId, foundCharacterId);
+        
+        Persona.LOGGER.info("[Persona] Posting CharacterPreSwitchEvent for player: {}, from: {}, to: {}", 
+            player.getName().getString(), 
+            (oldActiveCharacterId != null ? oldActiveCharacterId.toString() : "null"), 
+            foundCharacterId.toString());
+            
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(preSwitchEvent);
+        
+        // Wait for the async gate to complete (with timeout)
+        CompletableFuture<Void> readyFuture = preSwitchEvent.getReady();
+        try {
+            // Wait up to 5 seconds for addons to complete their pre-switch logic
+            readyFuture.get(5, TimeUnit.SECONDS);
+            Persona.LOGGER.info("[Persona] CharacterPreSwitchEvent async gate completed successfully");
+        } catch (Exception e) {
+            Persona.LOGGER.warn("[Persona] CharacterPreSwitchEvent async gate timed out or failed: {}", e.getMessage());
+            // Continue with the switch even if the async gate fails/times out
+        }
+
+        // Proceed with the actual character switch
         characterData.setActiveCharacterId(foundCharacterId);
 
         CharacterProfile newActiveProfile = characterData.getCharacter(foundCharacterId);
@@ -636,9 +621,11 @@ public class CommandRegistry {
             Persona.LOGGER.info("[Persona] Triggered age update for {} during switch.", newActiveProfile.getDisplayName());
         }
 
+        // Fire the CharacterSwitchEvent (post-switch)
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
             new world.landfall.persona.registry.PersonaEvents.CharacterSwitchEvent(player, oldActiveCharacterId, foundCharacterId)
         );
+        
         PersonaNetworking.sendToPlayer(characterData, player);
         sendSuccess(player, Component.translatable("command.persona.success.switch", targetProfile.getDisplayName()), fromGui);
         if (fromGui) PersonaNetworking.sendCreationResponseToPlayer(player, true, "command.persona.success.switch", targetProfile.getDisplayName());
@@ -691,6 +678,15 @@ public class CommandRegistry {
         // Check if trying to delete active character
         if (foundCharacterId.equals(characterData.getActiveCharacterId())) {
             sendError(player, Component.translatable("command.persona.error.delete_active"), fromGui);
+            return;
+        }
+
+        // Fire the CharacterDeleteEvent before deletion
+        PersonaEvents.CharacterDeleteEvent deleteEvent = new PersonaEvents.CharacterDeleteEvent(player, foundCharacterId);
+        NeoForge.EVENT_BUS.post(deleteEvent);
+        
+        // If the event was cancelled, don't proceed with deletion
+        if (deleteEvent.isCanceled()) {
             return;
         }
 
