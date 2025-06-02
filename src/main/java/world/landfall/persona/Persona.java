@@ -26,6 +26,7 @@ import world.landfall.persona.util.NameListManager;
 import world.landfall.persona.registry.PersonaNetworking;
 import net.minecraft.server.level.ServerPlayer;
 import world.landfall.persona.features.aging.AgingClientEvents;
+import world.landfall.persona.features.landfalladdon.death.DeathHandler;
 
 @Mod(Persona.MODID)
 public class Persona {
@@ -39,6 +40,9 @@ public class Persona {
 
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
         NeoForge.EVENT_BUS.addListener(this::onPlayerLoggedIn);
+        NeoForge.EVENT_BUS.register(DeathHandler.class);
+        // Register event listeners defined in PersonaEvents (FORGE bus)
+        NeoForge.EVENT_BUS.register(world.landfall.persona.registry.PersonaEvents.class);
 
         // Initialize name lists
         NameListManager.init();

@@ -754,7 +754,11 @@ public class CommandRegistry {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("\n§6=== ModData for %s (%s) ===§r\n", profile.getDisplayName(), profile.getId()));
+        sb.append(String.format("\n§6=== Character Data for %s (%s) ===§r\n", profile.getDisplayName(), profile.getId()));
+        sb.append(String.format("§eDisplay Name:§r %s\n", profile.getDisplayName()));
+        sb.append(String.format("§eUUID:§r %s\n", profile.getId().toString()));
+
+        sb.append("\n§6=== ModData ===§r\n");
         
         Map<ResourceLocation, CompoundTag> allModData = profile.getModData();
         if (allModData.isEmpty()) {

@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import world.landfall.persona.Persona; // Assuming Persona.MODID is accessible
 import world.landfall.persona.data.CharacterProfile;
 import world.landfall.persona.registry.PersonaEvents;
+import world.landfall.persona.config.Config;
 
 import java.util.Optional;
 
@@ -16,7 +17,7 @@ import java.util.Optional;
 public class OriginHandler {
     private static final Logger LOGGER = LogUtils.getLogger();
     // Using Persona's MODID for the namespace as this data is stored within Persona's CharacterProfile
-    public static final ResourceLocation ORIGIN_KEY = ResourceLocation.fromNamespaceAndPath(Persona.MODID, "character_origin");
+    public static final ResourceLocation ORIGIN_KEY = ResourceLocation.fromNamespaceAndPath(Persona.MODID, "origin_input");
     private static final String NO_ORIGIN_SELECTED = "UNSET";
 
     static {
@@ -25,6 +26,9 @@ public class OriginHandler {
 
     @SubscribeEvent
     public static void onCharacterCreated(PersonaEvents.CharacterCreateEvent event) {
+        if (!Config.ENABLE_LANDFALL_ADDONS.get()) {
+            return;
+        }
         CharacterProfile profile = event.getProfile();
         if (profile != null) {
             CompoundTag modData = profile.getModData(ORIGIN_KEY);
@@ -41,6 +45,10 @@ public class OriginHandler {
     }
 
     public static void setOrigin(CharacterProfile profile, Origin origin) {
+        if (!Config.ENABLE_LANDFALL_ADDONS.get()) {
+            LOGGER.warn("[OriginHandler] Attempted to set origin while Landfall Addons are disabled.");
+            return;
+        }
         if (profile == null) {
             LOGGER.warn("[OriginHandler] Attempted to set origin on a null profile.");
             return;
@@ -55,6 +63,9 @@ public class OriginHandler {
     }
 
     public static Optional<Origin> getOrigin(CharacterProfile profile) {
+        if (!Config.ENABLE_LANDFALL_ADDONS.get()) {
+            return Optional.empty();
+        }
         if (profile == null) {
             LOGGER.warn("[OriginHandler] Attempted to get origin from a null profile.");
             return Optional.empty();
@@ -71,6 +82,9 @@ public class OriginHandler {
     }
     
     public static boolean hasSelectedOrigin(CharacterProfile profile) {
+        if (!Config.ENABLE_LANDFALL_ADDONS.get()) {
+            return false;
+        }
         if (profile == null) return false;
         return getOrigin(profile).isPresent();
     }

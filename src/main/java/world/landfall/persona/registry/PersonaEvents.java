@@ -105,4 +105,28 @@ public class PersonaEvents {
                 player.getClass().getSimpleName(), player.getData(PlayerCharacterCapability.CHARACTER_DATA) != null);
         }
     }
+
+    @SubscribeEvent
+    public static void onPlayerClone(PlayerEvent.Clone event) {
+        // This event fires when a player is cloned (e.g., on death or dimension change).
+        // Ensure we copy over the PlayerCharacterData capability so character info persists.
+        Player original = event.getOriginal();
+        Player clone = event.getEntity();
+
+        PlayerCharacterData originalData = original.getData(PlayerCharacterCapability.CHARACTER_DATA);
+        PlayerCharacterData cloneData = clone.getData(PlayerCharacterCapability.CHARACTER_DATA);
+
+        if (originalData != null && cloneData != null) {
+            cloneData.copyFrom(originalData);
+            Persona.LOGGER.debug("[Persona] Copied PlayerCharacterData from original to clone for player {}. Characters: {} active: {}", 
+                clone.getName().getString(), cloneData.getCharacters().size(), cloneData.getActiveCharacterId());
+            // Send updated character data to the client so GUIs stay in sync
+            if (clone instanceof ServerPlayer serverClone) {
+                world.landfall.persona.registry.PersonaNetworking.sendToPlayer(cloneData, serverClone);
+            }
+        } else {
+            Persona.LOGGER.warn("[Persona] Failed to copy PlayerCharacterData on clone. Original null: {} clone null: {}", 
+                originalData == null, cloneData == null);
+        }
+    }
 } 

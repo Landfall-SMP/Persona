@@ -16,6 +16,11 @@ public class Config {
     public static final ModConfigSpec.BooleanValue SHOW_USERNAME_IN_TABLIST;
     public static final ModConfigSpec.ConfigValue<String> TABLIST_NAME_COLOR;
 
+    // Character Features
+    public static final ModConfigSpec.BooleanValue ENABLE_INVENTORY_SYSTEM;
+    public static final ModConfigSpec.BooleanValue ENABLE_LOCATION_SYSTEM;
+    public static final ModConfigSpec.BooleanValue ENABLE_LANDFALL_ADDONS;
+
     // Aging System Settings
     public static final ModConfigSpec.BooleanValue ENABLE_AGING_SYSTEM;
     public static final ModConfigSpec.DoubleValue TIME_PASSING_RATIO;
@@ -57,6 +62,28 @@ public class Config {
             .define("tablistNameColor", "e");
 
         BUILDER.pop(); // End Display Name System
+        
+        // Character Features
+        BUILDER.push("Character Features");
+
+        ENABLE_INVENTORY_SYSTEM = BUILDER
+            .comment("Master toggle for the character inventory system.",
+                    "If false, characters won't have separate inventories.",
+                    "WARNING: Disabling this with existing characters may cause inventory loss!")
+            .define("enableInventorySystem", true);
+
+        ENABLE_LOCATION_SYSTEM = BUILDER
+            .comment("Master toggle for the character location system.",
+                    "If false, characters won't remember their last location.",
+                    "WARNING: Disabling this with existing characters may cause location data loss!")
+            .define("enableLocationSystem", true);
+
+        ENABLE_LANDFALL_ADDONS = BUILDER
+            .comment("Master toggle for Landfall-specific addon features.",
+                    "This includes Origins and other Landfall-specific content.")
+            .define("enableLandfallAddons", true);
+
+        BUILDER.pop(); // End Character Features
         
         // Aging System Settings
         BUILDER.push("Aging System");

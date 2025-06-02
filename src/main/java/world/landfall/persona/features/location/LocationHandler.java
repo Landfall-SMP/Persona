@@ -15,6 +15,7 @@ import world.landfall.persona.registry.PersonaEvents;
 import world.landfall.persona.data.CharacterProfile;
 import world.landfall.persona.data.PlayerCharacterCapability;
 import world.landfall.persona.data.PlayerCharacterData;
+import world.landfall.persona.config.Config;
 
 import java.util.UUID;
 
@@ -29,6 +30,9 @@ public class LocationHandler {
 
     @SubscribeEvent
     public static void onCreate(PersonaEvents.CharacterCreateEvent event) {
+        if (!Config.ENABLE_LOCATION_SYSTEM.get()) {
+            return;
+        }
         try {
             LOGGER.info("[LocationHandler] Create event for player: {}, character: {}",
                 event.getPlayer().getName().getString(), event.getCharacterId());
@@ -48,6 +52,10 @@ public class LocationHandler {
 
     @SubscribeEvent
     public static void onPreSwitch(PersonaEvents.CharacterPreSwitchEvent event) {
+        if (!Config.ENABLE_LOCATION_SYSTEM.get()) {
+            event.getReady().complete(null);
+            return;
+        }
         ServerPlayer player;
         UUID playerId;
 
@@ -90,6 +98,9 @@ public class LocationHandler {
 
     @SubscribeEvent
     public static void onSwitch(PersonaEvents.CharacterSwitchEvent event) {
+        if (!Config.ENABLE_LOCATION_SYSTEM.get()) {
+            return;
+        }
         ServerPlayer player;
         UUID playerId;
 

@@ -445,15 +445,23 @@ public class PersonaNetworking {
     }
 
     // New payload for server config sync
-    public static record ServerConfigSyncPayload(boolean isAgingEnabled) implements CustomPacketPayload {
+    public static record ServerConfigSyncPayload(
+        boolean isAgingEnabled,
+        boolean isInventoryEnabled,
+        boolean isLocationEnabled,
+        boolean isLandfallAddonsEnabled
+    ) implements CustomPacketPayload {
         public ServerConfigSyncPayload(RegistryFriendlyByteBuf buf) {
-            this(buf.readBoolean());
+            this(buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean());
         }
         
         public void write(FriendlyByteBuf buf) {
             buf.writeBoolean(isAgingEnabled);
+            buf.writeBoolean(isInventoryEnabled);
+            buf.writeBoolean(isLocationEnabled);
+            buf.writeBoolean(isLandfallAddonsEnabled);
         }
-        
+
         @Override
         public Type<ServerConfigSyncPayload> type() {
             if (SERVER_CONFIG_SYNC_TYPE == null) {
@@ -466,6 +474,9 @@ public class PersonaNetworking {
             public static void handleClientPacket(final ServerConfigSyncPayload payload, final IPayloadContext context) {
                 context.enqueueWork(() -> {
                     ClientSyncedConfig.updateAgingSystemStatus(payload.isAgingEnabled());
+                    ClientSyncedConfig.updateInventorySystemStatus(payload.isInventoryEnabled());
+                    ClientSyncedConfig.updateLocationSystemStatus(payload.isLocationEnabled());
+                    ClientSyncedConfig.updateLandfallAddonsStatus(payload.isLandfallAddonsEnabled());
                 });
             }
         }
@@ -481,6 +492,10 @@ public class PersonaNetworking {
             return;
         }
         boolean agingEnabled = Config.ENABLE_AGING_SYSTEM.get();
-        PacketDistributor.sendToPlayer(player, new ServerConfigSyncPayload(agingEnabled));
+        boolean inventoryEnabled = Config.ENABLE_INVENTORY_SYSTEM.get();
+        boolean locationEnabled = Config.ENABLE_LOCATION_SYSTEM.get();
+        boolean landfallEnabled = Config.ENABLE_LANDFALL_ADDONS.get();
+        PacketDistributor.sendToPlayer(player, new ServerConfigSyncPayload(
+            agingEnabled, inventoryEnabled, locationEnabled, landfallEnabled));
     }
 } 

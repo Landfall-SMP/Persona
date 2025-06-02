@@ -3,7 +3,6 @@ package world.landfall.persona.data;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.resources.ResourceLocation;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,16 +25,7 @@ public class PlayerCharacterData {
         
         ListTag charactersList = new ListTag();
         characters.forEach((uuid, profile) -> {
-            CompoundTag profileTag = new CompoundTag();
-            profileTag.putUUID("id", uuid);
-            profileTag.putString("displayName", profile.getDisplayName());
-            
-            CompoundTag modDataTag = new CompoundTag();
-            profile.getModData().forEach((modId, data) -> 
-                modDataTag.put(modId.toString(), data));
-            profileTag.put("modData", modDataTag);
-            
-            charactersList.add(profileTag);
+            charactersList.add(profile.serialize());
         });
         tag.put("characters", charactersList);
         
@@ -45,27 +35,15 @@ public class PlayerCharacterData {
     public static PlayerCharacterData deserialize(CompoundTag tag) {
         PlayerCharacterData data = new PlayerCharacterData();
         
-        if (tag.contains("activeCharacter", Tag.TAG_INT_ARRAY)) { // TAG_INT_ARRAY is for UUIDs
+        if (tag.contains("activeCharacter", Tag.TAG_INT_ARRAY)) { // UUIDs are stored as TAG_INT_ARRAY
             data.activeCharacterId = tag.getUUID("activeCharacter");
         }
         
         ListTag charactersList = tag.getList("characters", Tag.TAG_COMPOUND);
         for (Tag t : charactersList) {
-            if (t instanceof CompoundTag profileTag) { // Modern instanceof check
-                UUID id = profileTag.getUUID("id");
-                String displayName = profileTag.getString("displayName");
-                
-                CharacterProfile profile = new CharacterProfile(id, displayName);
-                if (profileTag.contains("modData", Tag.TAG_COMPOUND)) {
-                    CompoundTag modData = profileTag.getCompound("modData");
-                    modData.getAllKeys().forEach(key -> {
-                        ResourceLocation modId = ResourceLocation.tryParse(key);
-                        if (modId != null && modData.contains(key, Tag.TAG_COMPOUND)) {
-                            profile.setModData(modId, modData.getCompound(key));
-                        }
-                    });
-                }
-                data.characters.put(id, profile);
+            if (t instanceof CompoundTag profileTag) {
+                CharacterProfile profile = CharacterProfile.deserialize(profileTag);
+                data.characters.put(profile.getId(), profile);
             }
         }
         return data;
@@ -100,7 +78,9 @@ public class PlayerCharacterData {
     
     public void copyFrom(PlayerCharacterData other) {
         this.characters.clear();
-        this.characters.putAll(other.characters);
+        other.characters.forEach((id, profile) -> {
+            this.characters.put(id, CharacterProfile.deserialize(profile.serialize()));
+        });
         this.activeCharacterId = other.activeCharacterId;
     }
 }

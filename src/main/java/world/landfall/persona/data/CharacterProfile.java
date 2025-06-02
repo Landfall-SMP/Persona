@@ -5,6 +5,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import world.landfall.persona.config.Config;
 import world.landfall.persona.Persona;
+import world.landfall.persona.features.landfalladdon.LandfallAddonData;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,6 +29,10 @@ public class CharacterProfile {
         this.id = id;
         setDisplayName(displayName, true); // Validate on creation
         this.modData = new HashMap<>();
+        
+        // Initialize LandfallAddon data
+        LandfallAddonData.initializeData(this);
+
         // Initialize isDeceased in modData
         CompoundTag deceasedTag = new CompoundTag();
         deceasedTag.putBoolean("value", false);
@@ -38,6 +43,10 @@ public class CharacterProfile {
         this.id = id;
         setDisplayName(displayName, skipValidation);
         this.modData = new HashMap<>();
+        
+        // Initialize LandfallAddon data
+        LandfallAddonData.initializeData(this);
+
         // Initialize isDeceased in modData
         CompoundTag deceasedTag = new CompoundTag();
         deceasedTag.putBoolean("value", false);

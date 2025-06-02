@@ -71,6 +71,7 @@ public class CharacterManagementScreen extends Screen {
     private CharacterSyncManager syncManager;
     private final List<Button> switchButtons = new ArrayList<>();
     private final List<Button> deleteButtons = new ArrayList<>();
+    private boolean hasCheckedForCharacters = false;
     
     public CharacterManagementScreen(Player player) {
         super(Component.translatable("screen.persona.character_management"));
@@ -91,13 +92,6 @@ public class CharacterManagementScreen extends Screen {
         // resync on open
         syncManager.startSync();
         updateCharacterList();
-        
-        // If there are no characters, go directly to character creation
-        PlayerCharacterData data = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
-        if (data != null && data.getCharacters().isEmpty() && minecraft != null) {
-            minecraft.setScreen(new CharacterCreationScreen(this));
-            return;
-        }
         
         Button createButton = Button.builder(Component.literal("+"), button -> {
             if (minecraft != null) {
@@ -346,6 +340,16 @@ public class CharacterManagementScreen extends Screen {
             UIErrorHandler.showError("gui.persona.error.sync_failed");
         }
         updateCharacterList();
+        
+        // Check for characters only after sync is complete and only once
+        if (!hasCheckedForCharacters) {
+            hasCheckedForCharacters = true;
+            PlayerCharacterData data = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
+            if (data != null && data.getCharacters().isEmpty() && minecraft != null) {
+                minecraft.setScreen(new CharacterCreationScreen(this));
+                return;
+            }
+        }
     }
     
     private record CharacterEntry(UUID id, CharacterProfile profile) {}
