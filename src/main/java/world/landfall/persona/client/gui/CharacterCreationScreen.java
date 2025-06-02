@@ -88,7 +88,6 @@ public class CharacterCreationScreen extends Screen {
         addRenderableWidget(cancelButton);
     }
     
-    @SuppressWarnings("null")
     private void handleCancel() {
         if (minecraft == null) return;
         
@@ -177,7 +176,6 @@ public class CharacterCreationScreen extends Screen {
         UIErrorHandler.showError(errorKey, args);
     }
     
-    @SuppressWarnings("null")
     private void handleSyncComplete(boolean success) {
         if (minecraft != null) {
             if (!success) {

@@ -138,7 +138,7 @@ public class CharacterManagementScreen extends Screen {
     }
     
     @Override
-    public void render(@SuppressWarnings("null") GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.renderBackground(graphics, mouseX, mouseY, partialTick);
         
         // dark panel, looks prettier
@@ -257,7 +257,7 @@ public class CharacterManagementScreen extends Screen {
     }
     
     @Override
-    public void renderBackground(@SuppressWarnings("null") GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         // fought too hard with the blur for way too long, just sliding this here for now
     }
     
@@ -281,7 +281,6 @@ public class CharacterManagementScreen extends Screen {
         }).bounds(x, y, Layout.LIST_ITEM_HEIGHT, Layout.BUTTON_HEIGHT).build();
     }
     
-    @SuppressWarnings("null")
     private Button createDeleteButton(int x, int y, String characterId) {
         return Button.builder(Component.literal("X"), button -> {
             if (minecraft != null) {
