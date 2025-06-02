@@ -10,7 +10,6 @@ import world.landfall.persona.data.CharacterProfile;
 import world.landfall.persona.data.PlayerCharacterCapability;
 import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.features.landfalladdon.LandfallAddonData;
-import world.landfall.persona.features.landfalladdon.shells.Shell;
 import world.landfall.persona.features.landfalladdon.shells.ShellManager;
 
 import java.util.UUID;
