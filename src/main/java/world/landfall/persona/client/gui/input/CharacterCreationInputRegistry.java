@@ -29,7 +29,7 @@ public class CharacterCreationInputRegistry {
         }
         
         providers.put(id, provider);
-        Persona.LOGGER.info("[Persona] Registered CharacterCreationInputProvider: {}", id);
+        Persona.LOGGER.debug("[Persona] Registered CharacterCreationInputProvider: {}", id);
         return true;
     }
     

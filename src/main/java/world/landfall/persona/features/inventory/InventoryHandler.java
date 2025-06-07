@@ -24,7 +24,7 @@ public class InventoryHandler {
     private static final ResourceLocation INVENTORY_KEY = ResourceLocation.fromNamespaceAndPath(Persona.MODID, "inventory");
 
     static {
-        LOGGER.info("InventoryHandler loaded for Persona.");
+        LOGGER.debug("InventoryHandler loaded for Persona.");
     }
 
     @SubscribeEvent
@@ -33,13 +33,13 @@ public class InventoryHandler {
             return;
         }
         try {
-            LOGGER.info("[InventoryHandler] Create event for player: {}, character: {}",
+            LOGGER.debug("[InventoryHandler] Create event for player: {}, character: {}",
                 event.getPlayer().getName().getString(), event.getCharacterId());
 
             CharacterProfile profile = event.getProfile();
             if (profile != null) {
                 profile.setModData(INVENTORY_KEY, new CompoundTag());
-                LOGGER.info("[InventoryHandler] Initialized empty inventory data for character: {}", event.getCharacterId());
+                LOGGER.debug("[InventoryHandler] Initialized empty inventory data for character: {}", event.getCharacterId());
             } else {
                 LOGGER.warn("[InventoryHandler] CharacterProfile is null in CreateEvent for character: {}. Cannot initialize inventory data.", event.getCharacterId());
             }
@@ -67,7 +67,7 @@ public class InventoryHandler {
             playerId = player.getUUID();
             UUID fromCharacterId = event.getFromCharacterId();
 
-            LOGGER.info("[InventoryHandler] PreSwitch event for player: {} (ID: {}), from character: {}",
+            LOGGER.debug("[InventoryHandler] PreSwitch event for player: {} (ID: {}), from character: {}",
                 player.getName().getString(), playerId, fromCharacterId);
 
             if (fromCharacterId != null) {
@@ -81,13 +81,13 @@ public class InventoryHandler {
                 if (fromProfile != null) {
                     CompoundTag inventoryTag = saveInventory(player);
                     fromProfile.setModData(INVENTORY_KEY, inventoryTag);
-                    LOGGER.info("[InventoryHandler] Saved inventory for character {} ({} items). Player: {}",
+                    LOGGER.debug("[InventoryHandler] Saved inventory for character {} ({} items). Player: {}",
                         fromCharacterId, inventoryTag.getList("Items", 10).size(), playerId);
                 } else {
                     LOGGER.warn("[InventoryHandler] 'From' CharacterProfile is null for character: {}. Cannot save inventory.", fromCharacterId);
                 }
             } else {
-                LOGGER.info("[InventoryHandler] No 'from' character ID, nothing to save for inventory.");
+                LOGGER.debug("[InventoryHandler] No 'from' character ID, nothing to save for inventory.");
             }
         } catch (Exception e) {
             LOGGER.error("[InventoryHandler] Error in PreSwitch event handler for inventory", e);
@@ -113,7 +113,7 @@ public class InventoryHandler {
             playerId = player.getUUID();
             UUID toCharacterId = event.getToCharacterId();
 
-            LOGGER.info("[InventoryHandler] Switch event for player: {} (ID: {}), to character: {}",
+            LOGGER.debug("[InventoryHandler] Switch event for player: {} (ID: {}), to character: {}",
                 player.getName().getString(), playerId, toCharacterId);
 
             if (toCharacterId != null) {
@@ -129,10 +129,10 @@ public class InventoryHandler {
                     CompoundTag inventoryTag = toProfile.getModData(INVENTORY_KEY);
                     if (inventoryTag != null && !inventoryTag.isEmpty()) {
                         loadInventory(player, inventoryTag);
-                        LOGGER.info("[InventoryHandler] Loaded inventory for character {} ({} items). Player: {}",
+                        LOGGER.debug("[InventoryHandler] Loaded inventory for character {} ({} items). Player: {}",
                             toCharacterId, inventoryTag.getList("Items", 10).size(), playerId);
                     } else {
-                        LOGGER.info("[InventoryHandler] No inventory data found for character {}, clearing inventory. Player: {}", toCharacterId, playerId);
+                        LOGGER.debug("[InventoryHandler] No inventory data found for character {}, clearing inventory. Player: {}", toCharacterId, playerId);
                         player.getInventory().clearContent();
                         player.inventoryMenu.broadcastChanges();
                     }
@@ -168,7 +168,7 @@ public class InventoryHandler {
             }
 
             UUID characterId = event.getCharacterId();
-            LOGGER.info("[InventoryHandler] Delete event for player: {}, character: {}",
+            LOGGER.debug("[InventoryHandler] Delete event for player: {}, character: {}",
                 serverPlayer.getName().getString(), characterId);
 
             PlayerCharacterData characterData = serverPlayer.getData(PlayerCharacterCapability.CHARACTER_DATA);
@@ -188,13 +188,13 @@ public class InventoryHandler {
             // Check if the character has any inventory items
             CompoundTag inventoryTag = characterToDelete.getModData(INVENTORY_KEY);
             if (inventoryTag == null || inventoryTag.isEmpty() || !inventoryTag.contains("Items")) {
-                LOGGER.info("[InventoryHandler] Character {} has no inventory to transfer.", characterId);
+                LOGGER.debug("[InventoryHandler] Character {} has no inventory to transfer.", characterId);
                 return;
             }
 
             ListTag itemsList = inventoryTag.getList("Items", 10);
             if (itemsList.isEmpty()) {
-                LOGGER.info("[InventoryHandler] Character {} has empty inventory, no transfer needed.", characterId);
+                LOGGER.debug("[InventoryHandler] Character {} has empty inventory, no transfer needed.", characterId);
                 return;
             }
 
@@ -204,14 +204,14 @@ public class InventoryHandler {
                 event.setCanceled(true);
                 serverPlayer.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
                     "gui.persona.error.inventory_not_empty_for_transfer", characterToDelete.getDisplayName()));
-                LOGGER.info("[InventoryHandler] Cancelled deletion of character {} - player {} inventory is not empty.", 
+                LOGGER.debug("[InventoryHandler] Cancelled deletion of character {} - player {} inventory is not empty.", 
                     characterId, serverPlayer.getName().getString());
                 return;
             }
 
             // Transfer the inventory to the player
             loadInventory(serverPlayer, inventoryTag);
-            LOGGER.info("[InventoryHandler] Transferred {} items from character {} to player {}",
+            LOGGER.debug("[InventoryHandler] Transferred {} items from character {} to player {}",
                 itemsList.size(), characterToDelete.getDisplayName(), serverPlayer.getName().getString());
             
             serverPlayer.sendSystemMessage(net.minecraft.network.chat.Component.translatable(

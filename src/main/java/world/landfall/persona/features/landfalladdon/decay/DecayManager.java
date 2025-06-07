@@ -156,7 +156,7 @@ public class DecayManager {
         Objects.requireNonNull(profile, "CharacterProfile cannot be null");
         
         try {
-            LOGGER.info("Character {} reached critical decay ({}). Marking as deceased.", 
+            LOGGER.debug("Character {} reached critical decay ({}). Marking as deceased.", 
                 profile.getDisplayName(), index);
                 
             CharacterUtils.setCharacterDeceased(player, profile.getId(), true);
@@ -385,7 +385,7 @@ public class DecayManager {
             Class.forName("world.landfall.persona.features.landfalladdon.ActionBarManager");
             Class.forName("world.landfall.persona.util.CharacterUtils");
             
-            LOGGER.info("DecayManager configuration validation passed");
+            LOGGER.debug("DecayManager configuration validation passed");
             return true;
             
         } catch (ClassNotFoundException e) {

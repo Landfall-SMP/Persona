@@ -101,7 +101,7 @@ public class DeathHandler {
         Objects.requireNonNull(profile, "Character profile cannot be null");
         
         try {
-            LOGGER.info("Processing death for character {} (player: {})", 
+            LOGGER.debug("Processing death for character {} (player: {})", 
                 profile.getDisplayName(), player.getName().getString());
 
             incrementDeathCount(profile);
@@ -110,7 +110,7 @@ public class DeathHandler {
             Shell newShell = assignNewShell(profile, origin);
 
             int deathCount = LandfallAddonData.getDeathCount(profile);
-            LOGGER.info("Character {} died (Origin: {}, New Shell: {}, Total Deaths: {})",
+            LOGGER.debug("Character {} died (Origin: {}, New Shell: {}, Total Deaths: {})",
                     profile.getDisplayName(), origin, newShell.name(), deathCount);
 
             updatePlayerActionBar(player, profile, newShell);

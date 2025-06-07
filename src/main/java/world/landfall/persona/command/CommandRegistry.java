@@ -515,13 +515,13 @@ public class CommandRegistry {
 
         AgingManager.handleCharacterCreationWithModData(newProfile, modData);
         AgingManager.calculateAndUpdateAge(newProfile);
-        Persona.LOGGER.info("[Persona] Initial age calculation triggered for new character {}.", displayName);
+        Persona.LOGGER.debug("[Persona] Initial age calculation triggered for new character {}.", displayName);
 
         characterData.addCharacter(newProfile.getId(), newProfile);
         GlobalCharacterRegistry.registerCharacter(newProfile.getId(), player.getUUID(), newProfile.getDisplayName());
 
         // Fire the CharacterCreateEvent
-        Persona.LOGGER.info("[Persona] Posting CharacterCreateEvent for player: {}, character: {}", 
+        Persona.LOGGER.debug("[Persona] Posting CharacterCreateEvent for player: {}, character: {}", 
             player.getName().getString(), newProfile.getDisplayName());
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
             new world.landfall.persona.registry.PersonaEvents.CharacterCreateEvent(player, newProfile.getId(), newProfile)
@@ -534,7 +534,7 @@ public class CommandRegistry {
             successKey = "command.persona.success.create_set_active";
             
             // Fire CharacterSwitchEvent to ensure display name is applied immediately
-            Persona.LOGGER.info("[Persona] Posting CharacterSwitchEvent for newly created character: {}", displayName);
+            Persona.LOGGER.debug("[Persona] Posting CharacterSwitchEvent for newly created character: {}", displayName);
             net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
                 new world.landfall.persona.registry.PersonaEvents.CharacterSwitchEvent(player, oldActiveCharacterId, newProfile.getId())
             );
@@ -594,7 +594,7 @@ public class CommandRegistry {
         world.landfall.persona.registry.PersonaEvents.CharacterPreSwitchEvent preSwitchEvent = 
             new world.landfall.persona.registry.PersonaEvents.CharacterPreSwitchEvent(player, oldActiveCharacterId, foundCharacterId);
         
-        Persona.LOGGER.info("[Persona] Posting CharacterPreSwitchEvent for player: {}, from: {}, to: {}", 
+        Persona.LOGGER.debug("[Persona] Posting CharacterPreSwitchEvent for player: {}, from: {}, to: {}", 
             player.getName().getString(), 
             (oldActiveCharacterId != null ? oldActiveCharacterId.toString() : "null"), 
             foundCharacterId.toString());
@@ -606,7 +606,7 @@ public class CommandRegistry {
         try {
             // Wait up to 5 seconds for addons to complete their pre-switch logic
             readyFuture.get(5, TimeUnit.SECONDS);
-            Persona.LOGGER.info("[Persona] CharacterPreSwitchEvent async gate completed successfully");
+            Persona.LOGGER.debug("[Persona] CharacterPreSwitchEvent async gate completed successfully");
         } catch (Exception e) {
             Persona.LOGGER.warn("[Persona] CharacterPreSwitchEvent async gate timed out or failed: {}", e.getMessage());
             // Continue with the switch even if the async gate fails/times out
@@ -618,7 +618,7 @@ public class CommandRegistry {
         CharacterProfile newActiveProfile = characterData.getCharacter(foundCharacterId);
         if (newActiveProfile != null) {
             AgingManager.triggerAgeUpdate(player, newActiveProfile);
-            Persona.LOGGER.info("[Persona] Triggered age update for {} during switch.", newActiveProfile.getDisplayName());
+            Persona.LOGGER.debug("[Persona] Triggered age update for {} during switch.", newActiveProfile.getDisplayName());
         }
 
         // Fire the CharacterSwitchEvent (post-switch)

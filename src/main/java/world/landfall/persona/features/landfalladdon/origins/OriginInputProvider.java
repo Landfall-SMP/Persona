@@ -66,7 +66,7 @@ public class OriginInputProvider implements CharacterCreationInputProvider {
             for (Origin origin : Origin.values()) {
                 if (input.startsWith(origin.getDisplayName())) {
                     tag.putString("selectedOrigin", origin.name());
-                    Persona.LOGGER.info("[Persona] Setting character origin to: {}", origin.getDisplayName());
+                    Persona.LOGGER.debug("[Persona] Setting character origin to: {}", origin.getDisplayName());
                     return;
                 }
             }

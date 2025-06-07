@@ -17,7 +17,7 @@ public class OriginManager {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     static {
-        LOGGER.info("[Persona] OriginManager loaded for Landfall Addon features.");
+        LOGGER.debug("[Persona] OriginManager loaded for Landfall Addon features.");
     }
 
     @EventBusSubscriber(modid = Persona.MODID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
@@ -26,7 +26,7 @@ public class OriginManager {
         public static void onClientSetup(FMLClientSetupEvent event) {
             event.enqueueWork(() -> {
                 CharacterCreationInputRegistry.register(new OriginInputProvider());
-                LOGGER.info("[Persona] Registered OriginInputProvider for character creation GUI.");
+                LOGGER.debug("[Persona] Registered OriginInputProvider for character creation GUI.");
             });
         }
     }

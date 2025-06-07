@@ -74,7 +74,7 @@ public class LandfallAddonData {
             landfallData.putInt(DEATH_COUNT_KEY, 0);
             
             profile.setModData(DATA_KEY, landfallData);
-            LOGGER.info("Initialized LandfallAddon data for character {}", profile.getId());
+            LOGGER.debug("Initialized LandfallAddon data for character {}", profile.getId());
             
         } catch (Exception e) {
             LOGGER.error("Failed to initialize LandfallAddon data for character {}", profile.getId(), e);
@@ -153,7 +153,7 @@ public class LandfallAddonData {
             landfallData.putString(CURRENT_SHELL_KEY, shell.name());
             profile.setModData(DATA_KEY, landfallData);
             
-            LOGGER.info("Updated shell for character {} from {} to {}", 
+            LOGGER.debug("Updated shell for character {} from {} to {}", 
                 profile.getId(), previousShell, shell.name());
                 
         } catch (Exception e) {
@@ -228,7 +228,7 @@ public class LandfallAddonData {
             landfallData.putInt(DEATH_COUNT_KEY, newCount);
             profile.setModData(DATA_KEY, landfallData);
             
-            LOGGER.info("Incremented death count for character {} from {} to {}", 
+            LOGGER.debug("Incremented death count for character {} from {} to {}", 
                 profile.getId(), currentCount, newCount);
                 
         } catch (Exception e) {
@@ -301,7 +301,7 @@ public class LandfallAddonData {
             
             profile.setModData(DATA_KEY, data);
             
-            LOGGER.info("Set spawn point for character {} to ({}, {}, {}) in {} (forced: {})", 
+            LOGGER.debug("Set spawn point for character {} to ({}, {}, {}) in {} (forced: {})", 
                 profile.getId(), x, y, z, dimension, forced);
                 
         } catch (Exception e) {
@@ -426,7 +426,7 @@ public class LandfallAddonData {
         DATA_LOCK.writeLock().lock();
         try {
             profile.setModData(DATA_KEY, new CompoundTag());
-            LOGGER.info("Cleared LandfallAddon data for character {}", profile.getId());
+            LOGGER.debug("Cleared LandfallAddon data for character {}", profile.getId());
         } catch (Exception e) {
             LOGGER.error("Failed to clear data for character {}", profile.getId(), e);
             throw new IllegalStateException("Failed to clear data", e);

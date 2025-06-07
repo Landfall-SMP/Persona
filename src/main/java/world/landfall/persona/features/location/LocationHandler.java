@@ -25,7 +25,7 @@ public class LocationHandler {
     private static final ResourceLocation LOCATION_KEY = ResourceLocation.fromNamespaceAndPath(Persona.MODID, "location");
 
     static {
-        LOGGER.info("LocationHandler loaded for Persona.");
+        LOGGER.debug("LocationHandler loaded for Persona.");
     }
 
     @SubscribeEvent
@@ -34,14 +34,14 @@ public class LocationHandler {
             return;
         }
         try {
-            LOGGER.info("[LocationHandler] Create event for player: {}, character: {}",
+            LOGGER.debug("[LocationHandler] Create event for player: {}, character: {}",
                 event.getPlayer().getName().getString(), event.getCharacterId());
 
             CharacterProfile profile = event.getProfile();
             if (profile != null) {
                 // Initialize with an empty tag for location data
                 profile.setModData(LOCATION_KEY, new CompoundTag());
-                LOGGER.info("[LocationHandler] Initialized empty location data for character: {}", event.getCharacterId());
+                LOGGER.debug("[LocationHandler] Initialized empty location data for character: {}", event.getCharacterId());
             } else {
                 LOGGER.warn("[LocationHandler] CharacterProfile is null for character: {}. Cannot initialize location data.", event.getCharacterId());
             }
@@ -69,7 +69,7 @@ public class LocationHandler {
             playerId = player.getUUID();
             UUID fromCharacterId = event.getFromCharacterId();
 
-            LOGGER.info("[LocationHandler] PreSwitch event for player: {} (ID: {}), from character: {}",
+            LOGGER.debug("[LocationHandler] PreSwitch event for player: {} (ID: {}), from character: {}",
                 player.getName().getString(), playerId, fromCharacterId);
 
             if (fromCharacterId != null) {
@@ -82,12 +82,12 @@ public class LocationHandler {
                 CharacterProfile fromProfile = characterData.getCharacter(fromCharacterId);
                 if (fromProfile != null) {
                     fromProfile.setModData(LOCATION_KEY, saveLocation(player));
-                    LOGGER.info("[LocationHandler] Saved location for character {}. Player: {}", fromCharacterId, playerId);
+                    LOGGER.debug("[LocationHandler] Saved location for character {}. Player: {}", fromCharacterId, playerId);
                 } else {
                     LOGGER.warn("[LocationHandler] 'From' CharacterProfile is null for character: {}. Cannot save location.", fromCharacterId);
                 }
             } else {
-                LOGGER.info("[LocationHandler] No 'from' character ID, nothing to save for location.");
+                LOGGER.debug("[LocationHandler] No 'from' character ID, nothing to save for location.");
             }
         } catch (Exception e) {
             LOGGER.error("[LocationHandler] Error in PreSwitch event handler for location", e);
@@ -113,7 +113,7 @@ public class LocationHandler {
             playerId = player.getUUID();
             UUID toCharacterId = event.getToCharacterId();
 
-            LOGGER.info("[LocationHandler] Switch event for player: {} (ID: {}), to character: {}",
+            LOGGER.debug("[LocationHandler] Switch event for player: {} (ID: {}), to character: {}",
                 player.getName().getString(), playerId, toCharacterId);
 
             if (toCharacterId != null) {
@@ -127,9 +127,9 @@ public class LocationHandler {
                     CompoundTag locationTag = toProfile.getModData(LOCATION_KEY);
                     if (locationTag != null && !locationTag.isEmpty()) {
                         loadLocation(player, locationTag);
-                        LOGGER.info("[LocationHandler] Loaded location for character {}. Player: {}", toCharacterId, playerId);
+                        LOGGER.debug("[LocationHandler] Loaded location for character {}. Player: {}", toCharacterId, playerId);
                     } else {
-                        LOGGER.info("[LocationHandler] No location data found for character {}, player remains at current location. Player: {}", toCharacterId, playerId);
+                        LOGGER.debug("[LocationHandler] No location data found for character {}, player remains at current location. Player: {}", toCharacterId, playerId);
                         // If no location data, player stays where they are. Could also TP to spawn or a default location if desired.
                     }
                 } else {

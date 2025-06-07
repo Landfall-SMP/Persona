@@ -26,7 +26,7 @@ public class DisplayNameManager {
         if (!(event.getPlayer() instanceof ServerPlayer serverPlayer)) {
             return;
         }
-        Persona.LOGGER.info("[Persona] DisplayNameManager.onCharacterSwitch for player: {}", serverPlayer.getName().getString());
+        Persona.LOGGER.debug("[Persona] DisplayNameManager.onCharacterSwitch for player: {}", serverPlayer.getName().getString());
 
         PlayerCharacterData data = serverPlayer.getData(PlayerCharacterCapability.CHARACTER_DATA);
         if (data == null) {

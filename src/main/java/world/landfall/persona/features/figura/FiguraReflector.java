@@ -97,11 +97,11 @@ public class FiguraReflector {
                 return;
             }
 
-            LOGGER.info("Attempting to load Figura avatar from: {}", fullPath);
+            LOGGER.debug("Attempting to load Figura avatar from: {}", fullPath);
             boolean loadInitiated = loadAvatarInternal(fullPath);
 
             if (loadInitiated) {
-                LOGGER.info("Figura avatar load initiated for '{}'. Waiting for it to be ready for upload.", avatarFolderName);
+                LOGGER.debug("Figura avatar load initiated for '{}'. Waiting for it to be ready for upload.", avatarFolderName);
                 waitForLoadAndUploadInternal(avatarFolderName, 10_000); // 10 second timeout
                 success = true; // Signifies the process was initiated successfully.
                 // Note: The actual upload happens asynchronously via waitForLoadAndUploadInternal.
@@ -126,7 +126,7 @@ public class FiguraReflector {
             Class<?> managerClass = Class.forName(MANAGER_CLASS);
             Method loadLocalAvatarMethod = managerClass.getMethod(LOAD_LOCAL_AVATAR_METHOD, Path.class);
             loadLocalAvatarMethod.invoke(null, avatarPath);
-            LOGGER.info("Figura's loadLocalAvatar method invoked for: {}", avatarPath);
+            LOGGER.debug("Figura's loadLocalAvatar method invoked for: {}", avatarPath);
             return true;
         } catch (Exception e) {
             LOGGER.error("Failed to invoke Figura's loadLocalAvatar method for '{}'", avatarPath, e);
@@ -189,7 +189,7 @@ public class FiguraReflector {
             uploadAvatarMethod.invoke(null, avatar);
 
             UPLOAD_TIMESTAMPS.addLast(System.currentTimeMillis());
-            LOGGER.info("Figura's uploadAvatar method invoked for player UUID: {}", localPlayerUUID);
+            LOGGER.debug("Figura's uploadAvatar method invoked for player UUID: {}", localPlayerUUID);
 
         } catch (Exception e) {
             LOGGER.error("Failed to invoke Figura's uploadAvatar method", e);
@@ -202,7 +202,7 @@ public class FiguraReflector {
             @Override
             public void run() {
                 if (isCurrentAvatarLoadedInternal()) {
-                    LOGGER.info("Avatar '{}' confirmed loaded. Proceeding with upload.", avatarFolderNameForLogging);
+                    LOGGER.debug("Avatar '{}' confirmed loaded. Proceeding with upload.", avatarFolderNameForLogging);
                     if (canUploadInternal()) {
                         uploadCurrentAvatarInternal();
                     } else {

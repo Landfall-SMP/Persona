@@ -285,7 +285,7 @@ public class ActionBarManager {
                 return false;
             }
             
-            LOGGER.info("ActionBarManager configuration validation passed");
+            LOGGER.debug("ActionBarManager configuration validation passed");
             return true;
             
         } catch (ClassNotFoundException e) {

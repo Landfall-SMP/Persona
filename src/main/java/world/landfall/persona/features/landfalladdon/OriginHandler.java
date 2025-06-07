@@ -422,7 +422,7 @@ public class OriginHandler {
             dataLock.writeLock().lock();
             dataLock.writeLock().unlock();
             
-            LOGGER.info("OriginHandler configuration validation passed");
+            LOGGER.debug("OriginHandler configuration validation passed");
             return true;
             
         } catch (ClassNotFoundException e) {

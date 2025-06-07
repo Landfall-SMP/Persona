@@ -41,7 +41,7 @@ public class FiguraClientEventListener {
         String characterDisplayName = event.getNewPersonaDisplayName();
  
         if (characterDisplayName != null && !characterDisplayName.isEmpty()) {
-            LOGGER.info("ClientPersonaSwitchedEvent: Persona switched to: '{}'. Attempting to apply corresponding Figura avatar.", characterDisplayName);
+            LOGGER.debug("ClientPersonaSwitchedEvent: Persona switched to: '{}'. Attempting to apply corresponding Figura avatar.", characterDisplayName);
             FiguraReflector.performAvatarSwitch(characterDisplayName);
         } else {
             LOGGER.warn("ClientPersonaSwitchedEvent: Persona switched, but character display name from event was null or empty. Cannot apply Figura avatar.");
@@ -62,7 +62,7 @@ public class FiguraClientEventListener {
         }
 
         if (characterDisplayName != null && !characterDisplayName.isEmpty()) {
-            LOGGER.info("Persona system triggered Figura avatar switch for: '{}'.", characterDisplayName);
+            LOGGER.debug("Persona system triggered Figura avatar switch for: '{}'.", characterDisplayName);
             FiguraReflector.performAvatarSwitch(characterDisplayName);
         } else {
             LOGGER.warn("Persona system triggered Figura avatar switch, but character display name was null or empty.");

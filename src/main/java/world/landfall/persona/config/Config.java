@@ -81,7 +81,7 @@ public class Config {
         ENABLE_LANDFALL_ADDONS = BUILDER
             .comment("Master toggle for Landfall-specific addon features.",
                     "This includes Origins and other Landfall-specific content.")
-            .define("enableLandfallAddons", true);
+            .define("enableLandfallAddons", false);
 
         BUILDER.pop(); // End Character Features
         

@@ -21,7 +21,7 @@ public class OriginHandler {
     private static final String NO_ORIGIN_SELECTED = "UNSET";
 
     static {
-        LOGGER.info("OriginHandler loaded for Persona Landfall Addon features.");
+        LOGGER.debug("OriginHandler loaded for Persona Landfall Addon features.");
     }
 
     @SubscribeEvent
@@ -37,7 +37,7 @@ public class OriginHandler {
                 CompoundTag originData = new CompoundTag();
                 originData.putString("selectedOrigin", NO_ORIGIN_SELECTED);
                 profile.setModData(ORIGIN_KEY, originData);
-                LOGGER.info("[OriginHandler] Initialized origin as UNSET for new character {}", profile.getId());
+                LOGGER.debug("[OriginHandler] Initialized origin as UNSET for new character {}", profile.getId());
             }
         } else {
             LOGGER.warn("[OriginHandler] CharacterProfile was null in CharacterCreateEvent for character ID: {}. Cannot set initial origin.", event.getCharacterId());
@@ -59,7 +59,7 @@ public class OriginHandler {
         }
         originData.putString("selectedOrigin", origin.name());
         profile.setModData(ORIGIN_KEY, originData);
-        LOGGER.info("[OriginHandler] Set origin to {} for character {}", origin.name(), profile.getId());
+        LOGGER.debug("[OriginHandler] Set origin to {} for character {}", origin.name(), profile.getId());
     }
 
     public static Optional<Origin> getOrigin(CharacterProfile profile) {

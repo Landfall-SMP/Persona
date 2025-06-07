@@ -113,7 +113,7 @@ public class AgingInputProvider implements CharacterCreationInputProvider {
                 age = Double.parseDouble(input);
                 // Clamp to config limits (should already be validated, but just in case)
                 age = Math.max(Config.MIN_CHARACTER_AGE.get(), Math.min(Config.MAX_CHARACTER_AGE.get(), age));
-                Persona.LOGGER.info("[Persona] Setting starting age to {}", age);
+                Persona.LOGGER.debug("[Persona] Setting starting age to {}", age);
             } catch (NumberFormatException e) {
                 age = Config.DEFAULT_CHARACTER_AGE.get();
                 Persona.LOGGER.warn("[Persona] Invalid age format ({}), using default: {}", input, age);

@@ -26,7 +26,7 @@ public class RegistryPersistence {
             }
             
             registryPath = personaDir.resolve(REGISTRY_FILE).normalize();
-            Persona.LOGGER.info("[Persona] Registry file initialized at {}", registryPath);
+            Persona.LOGGER.debug("[Persona] Registry file initialized at {}", registryPath);
         } catch (Exception e) {
             Persona.LOGGER.error("[Persona] Failed to initialize registry file", e);
             throw new RuntimeException("Failed to initialize registry file", e);
@@ -68,7 +68,7 @@ public class RegistryPersistence {
 
             // Save to file
             NbtIo.writeCompressed(root, registryPath);
-            Persona.LOGGER.info("[Persona] Registry saved successfully");
+            Persona.LOGGER.debug("[Persona] Registry saved successfully");
         } catch (IOException e) {
             Persona.LOGGER.error("[Persona] Failed to save registry", e);
         }
@@ -93,7 +93,7 @@ public class RegistryPersistence {
         }
 
         if (!registryPath.toFile().exists()) {
-            Persona.LOGGER.info("[Persona] No existing registry file found, starting fresh");
+            Persona.LOGGER.debug("[Persona] No existing registry file found, starting fresh");
             return data;
         }
 
@@ -118,7 +118,7 @@ public class RegistryPersistence {
                     data.characterNameMap.put(name.toLowerCase(), characterId);
                 }
 
-                Persona.LOGGER.info("[Persona] Registry loaded successfully");
+                Persona.LOGGER.debug("[Persona] Registry loaded successfully");
             }
         } catch (IOException e) {
             Persona.LOGGER.error("[Persona] Failed to load registry", e);

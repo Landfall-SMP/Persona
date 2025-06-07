@@ -123,7 +123,7 @@ public class PersonaNetworking {
             );
             registrar.playToClient(SERVER_CONFIG_SYNC_TYPE, SERVER_CONFIG_SYNC_CODEC, ServerConfigSyncPayload.Handler::handleClientPacket);
             
-            Persona.LOGGER.info("[Persona] Payload handlers registered successfully.");
+            Persona.LOGGER.debug("[Persona] Payload handlers registered successfully.");
         } catch (Exception e) {
             Persona.LOGGER.error("[Persona] Failed to register payload handlers", e);
             SYNC_TO_CLIENT_TYPE = null;

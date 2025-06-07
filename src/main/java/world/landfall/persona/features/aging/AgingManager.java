@@ -96,7 +96,7 @@ public class AgingManager {
         long backdateMillis = (long) (startingAge * realLifeDaysPerGameYear * MILLIS_PER_REAL_DAY);
         effectiveTimestampMillis = System.currentTimeMillis() - backdateMillis;
         
-        LOGGER.info("Character {} created with age: {:.2f} game years. Effective creation timestamp: {}. (Ratio: {:.2f} real days/game year)",
+        LOGGER.debug("Character {} created with age: {:.2f} game years. Effective creation timestamp: {}. (Ratio: {:.2f} real days/game year)",
                 profile.getDisplayName(), startingAge, effectiveTimestampMillis, realLifeDaysPerGameYear);
 
         agingDataTag.putLong(CREATION_TIMESTAMP_KEY, effectiveTimestampMillis);
@@ -137,7 +137,7 @@ public class AgingManager {
             return;
         }
         double currentAge = getCalculatedAge(profile);
-        LOGGER.info("Character {} ({}): Current age is approx. {:.2f} game years.",
+        LOGGER.debug("Character {} ({}): Current age is approx. {:.2f} game years.",
                 profile.getDisplayName(), profile.getId(), currentAge);
     }
 
@@ -227,7 +227,7 @@ public class AgingManager {
         public static void onClientSetup(FMLClientSetupEvent event) {
             event.enqueueWork(() -> {
                 CharacterCreationInputRegistry.register(new AgingInputProvider());
-                LOGGER.info("[Persona] Registered AgingInputProvider for character creation GUI.");
+                LOGGER.debug("[Persona] Registered AgingInputProvider for character creation GUI.");
             });
         }
     }
