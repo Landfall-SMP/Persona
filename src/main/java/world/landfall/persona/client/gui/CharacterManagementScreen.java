@@ -16,7 +16,6 @@ import world.landfall.persona.data.PlayerCharacterCapability;
 import world.landfall.persona.registry.PersonaNetworking;
 import world.landfall.persona.client.network.CharacterSyncManager;
 import net.minecraft.ChatFormatting;
-import world.landfall.persona.features.figura.event.ClientPersonaSwitchedEvent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -269,14 +268,9 @@ public class CharacterManagementScreen extends Screen {
                 if (entry.profile.isDeceased()) {
                     return;
                 }
+                // Send the switch request to server - success/failure will be handled by server response
                 PersonaNetworking.sendActionToServer(PersonaNetworking.Action.SWITCH, entry.id.toString(), true);
-                if (minecraft != null) {
-                    minecraft.getToasts().addToast(NotificationToast.success(
-                        Component.translatable("command.persona.success.switch", entry.profile.getDisplayName())
-                    ));
-                    // Fire the ClientPersonaSwitchedEvent after successful switch
-                    NeoForge.EVENT_BUS.post(new ClientPersonaSwitchedEvent(entry.profile.getDisplayName()));
-                }
+                // Note: Success toast and event will be fired by ClientNetworkHandler when server confirms success
             }
         }).bounds(x, y, Layout.LIST_ITEM_HEIGHT, Layout.BUTTON_HEIGHT).build();
     }

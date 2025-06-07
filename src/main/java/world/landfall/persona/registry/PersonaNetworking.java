@@ -309,9 +309,22 @@ public class PersonaNetworking {
         public static class Handler {
             public static void handleClientPacket(final CharacterCreationResponsePayload payload, final IPayloadContext context) {
                 context.enqueueWork(() -> {
-                    // Delegate to client-side handler
-                    world.landfall.persona.client.network.ClientNetworkHandler
-                        .handleCharacterCreationResponse(payload.success(), payload.messageKey(), payload.messageArgs());
+                    try {
+                        // Route to appropriate handler based on message key
+                        String messageKey = payload.messageKey();
+                        if (messageKey != null && (messageKey.contains("switch") || messageKey.contains("cooldown") || messageKey.contains("already_active"))) {
+                            // This is a character switch response
+                            world.landfall.persona.client.network.ClientNetworkHandler
+                                .handleCharacterSwitchResponse(payload.success(), payload.messageKey(), payload.messageArgs());
+                        } else {
+                            // This is a character creation response
+                            world.landfall.persona.client.network.ClientNetworkHandler
+                                .handleCharacterCreationResponse(payload.success(), payload.messageKey(), payload.messageArgs());
+                        }
+                    } catch (Exception e) {
+                        // Log error but don't crash the client
+                        System.err.println("[PersonaNetworking] Error handling character response: " + e.getMessage());
+                    }
                 });
             }
         }

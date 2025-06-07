@@ -95,7 +95,10 @@ public class CommandRegistry {
                 .then(Commands.argument("playerName", StringArgumentType.word())
                 .then(Commands.argument("characterNameOrUUID", StringArgumentType.string())
                 .then(Commands.argument("newName", StringArgumentType.string())
-                    .executes(CommandRegistry::adminRenameCharacter)))));
+                    .executes(CommandRegistry::adminRenameCharacter)))))
+            .then(Commands.literal("clearcooldown")
+                .then(Commands.argument("playerName", StringArgumentType.word())
+                    .executes(CommandRegistry::adminClearCooldown)));
         
         personaCommand.then(adminCommand); // Nest admin under persona
         
@@ -451,6 +454,20 @@ public class CommandRegistry {
         return 1;
     }
 
+    private static int adminClearCooldown(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        String playerName = StringArgumentType.getString(context, "playerName");
+        ServerPlayer targetPlayer = context.getSource().getServer().getPlayerList().getPlayerByName(playerName);
+        
+        if (targetPlayer == null) {
+            context.getSource().sendFailure(Component.translatable("command.persona.error.player_not_found", playerName));
+            return 0;
+        }
+
+        world.landfall.persona.util.CharacterSwitchCooldownManager.clearCooldown(targetPlayer);
+        context.getSource().sendSuccess(() -> Component.translatable("command.persona.admin.success.clear_cooldown", playerName), true);
+        return 1;
+    }
+
     private static UUID findCharacterId(String nameOrUUID, PlayerCharacterData characterData) {
         try {
             return UUID.fromString(nameOrUUID);
@@ -561,6 +578,14 @@ public class CommandRegistry {
             return;
         }
 
+        // Check cooldown before proceeding
+        if (!world.landfall.persona.util.CharacterSwitchCooldownManager.canSwitchCharacter(player)) {
+            int remainingSeconds = world.landfall.persona.util.CharacterSwitchCooldownManager.getRemainingCooldownSeconds(player);
+            sendError(player, Component.translatable("command.persona.error.switch_cooldown", remainingSeconds), fromGui);
+            if (fromGui) PersonaNetworking.sendCreationResponseToPlayer(player, false, "command.persona.error.switch_cooldown", String.valueOf(remainingSeconds));
+            return;
+        }
+
         UUID foundCharacterId = findCharacterId(nameOrUUID, characterData);
 
         if (foundCharacterId == null) {
@@ -625,6 +650,9 @@ public class CommandRegistry {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(
             new world.landfall.persona.registry.PersonaEvents.CharacterSwitchEvent(player, oldActiveCharacterId, foundCharacterId)
         );
+        
+        // Record the character switch for cooldown tracking
+        world.landfall.persona.util.CharacterSwitchCooldownManager.recordCharacterSwitch(player);
         
         PersonaNetworking.sendToPlayer(characterData, player);
         sendSuccess(player, Component.translatable("command.persona.success.switch", targetProfile.getDisplayName()), fromGui);
