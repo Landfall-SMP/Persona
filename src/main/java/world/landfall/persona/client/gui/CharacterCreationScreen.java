@@ -95,7 +95,7 @@ public class CharacterCreationScreen extends Screen {
             Optional<PlayerCharacterData> data = Optional.ofNullable(minecraft.player)
                 .map(player -> player.getData(PlayerCharacterCapability.CHARACTER_DATA));
             
-            if (data.map(d -> d.getCharacters().isEmpty()).orElse(false)) {
+            if (data.map(d -> d.getCharacterCount() == 0).orElse(false)) {
                 minecraft.setScreen(null);
                 return;
             }

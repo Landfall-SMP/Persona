@@ -122,9 +122,12 @@ public class CharacterManagementScreen extends Screen {
         if (data == null) return;
         
         List<CharacterEntry> newList = new ArrayList<>();
-        data.getCharacters().forEach((id, profile) ->
-            newList.add(new CharacterEntry(id, profile))
-        );
+        data.getCharacterIds().forEach((id, displayName) -> {
+            CharacterProfile profile = data.getCharacter(id);
+            if (profile != null) {
+                newList.add(new CharacterEntry(id, profile));
+            }
+        });
         
         // Only update if the list has changed
         if (!newList.equals(characterList)) {
@@ -338,7 +341,7 @@ public class CharacterManagementScreen extends Screen {
         if (!hasCheckedForCharacters) {
             hasCheckedForCharacters = true;
             PlayerCharacterData data = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
-            if (data != null && data.getCharacters().isEmpty() && minecraft != null) {
+            if (data != null && data.getCharacterCount() == 0 && minecraft != null) {
                 minecraft.setScreen(new CharacterCreationScreen(this));
                 return;
             }

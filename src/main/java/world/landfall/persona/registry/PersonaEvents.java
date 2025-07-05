@@ -105,6 +105,19 @@ public class PersonaEvents {
                 player.getClass().getSimpleName(), player.getData(PlayerCharacterCapability.CHARACTER_DATA) != null);
         }
     }
+    
+    @SubscribeEvent
+    public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        Player player = event.getEntity();
+        if (player != null) {
+            PlayerCharacterData data = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
+            if (data != null) {
+                // Clear client-side cache when disconnecting
+                data.clearClientCache();
+                Persona.LOGGER.debug("[Persona] Cleared client cache for player {}", player.getName().getString());
+            }
+        }
+    }
 
     @SubscribeEvent
     public static void onPlayerClone(PlayerEvent.Clone event) {
@@ -119,7 +132,7 @@ public class PersonaEvents {
         if (originalData != null && cloneData != null) {
             cloneData.copyFrom(originalData);
             Persona.LOGGER.debug("[Persona] Copied PlayerCharacterData from original to clone for player {}. Characters: {} active: {}", 
-                clone.getName().getString(), cloneData.getCharacters().size(), cloneData.getActiveCharacterId());
+                clone.getName().getString(), cloneData.getCharacterCount(), cloneData.getActiveCharacterId());
             // Send updated character data to the client so GUIs stay in sync
             if (clone instanceof ServerPlayer serverClone) {
                 world.landfall.persona.registry.PersonaNetworking.sendToPlayer(cloneData, serverClone);

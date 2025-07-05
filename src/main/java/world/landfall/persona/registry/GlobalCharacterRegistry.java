@@ -10,6 +10,7 @@ import world.landfall.persona.Persona;
 import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.data.PlayerCharacterCapability;
 
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.UUID;
 import java.util.Optional;
@@ -41,11 +42,13 @@ public class GlobalCharacterRegistry {
     public static void onServerStarting(ServerStartingEvent event) {
         registryLock.writeLock().lock();
         try {
-            RegistryPersistence.initialize(event.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT));
+            Path worldPath = event.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+            RegistryPersistence.initialize(worldPath);
+            world.landfall.persona.data.CharacterFileStorage.initialize(worldPath);
             RegistryPersistence.RegistryData data = RegistryPersistence.loadRegistry();
             characterToPlayerMap.putAll(data.characterToPlayerMap);
             characterNameMap.putAll(data.characterNameMap);
-            Persona.LOGGER.info("[Persona] Global Character Registry loaded from disk.");
+            Persona.LOGGER.info("[Persona] Global Character Registry and File Storage initialized from disk.");
         } finally {
             registryLock.writeLock().unlock();
         }
@@ -199,10 +202,13 @@ public class GlobalCharacterRegistry {
             if (data != null) {
                 registryLock.writeLock().lock();
                 try {
+                    // Load character IDs from file storage
+                    data.loadCharacterIdsFromStorage(player.getUUID());
+                    
                     // Register all characters atomically
-                    data.getCharacters().forEach((id, profile) -> {
+                    data.getCharacterIds().forEach((id, displayName) -> {
                         characterToPlayerMap.put(id, player.getUUID());
-                        characterNameMap.put(profile.getDisplayName().toLowerCase(), id);
+                        characterNameMap.put(displayName.toLowerCase(), id);
                     });
                     RegistryPersistence.saveRegistry(characterToPlayerMap, characterNameMap);
                     PersonaNetworking.sendToPlayer(data, player);

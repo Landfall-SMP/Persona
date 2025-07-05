@@ -319,20 +319,20 @@ public class CommandRegistry {
         }
 
         PlayerCharacterData characterData = targetPlayer.getData(PlayerCharacterCapability.CHARACTER_DATA);
-        if (characterData == null || characterData.getCharacters().isEmpty()) {
+        if (characterData == null || characterData.getCharacterCount() == 0) {
             context.getSource().sendSuccess(() -> Component.translatable("command.persona.admin.no_characters", playerName), false);
             return 1;
         }
 
         StringBuilder sb = new StringBuilder();
         sb.append("\n§6=== Characters for §f").append(playerName).append(" §6===§r\n");
-        characterData.getCharacters().forEach((uuid, profile) -> {
+        characterData.getCharacterIds().forEach((uuid, displayName) -> {
             if (uuid.equals(characterData.getActiveCharacterId())) {
                 sb.append("§a➤ "); // Green arrow for active character
             } else {
                 sb.append("§7• "); // Gray bullet for inactive characters
             }
-            sb.append("§f").append(profile.getDisplayName()); // White text for name
+            sb.append("§f").append(displayName); // White text for name
             sb.append(" §8(").append(uuid.toString().substring(0, 8)).append(")"); // Gray UUID
             if (uuid.equals(characterData.getActiveCharacterId())) {
                 sb.append(" §a(Active)"); // Green active indicator
@@ -472,9 +472,9 @@ public class CommandRegistry {
         try {
             return UUID.fromString(nameOrUUID);
         } catch (IllegalArgumentException e) {
-            for (CharacterProfile profile : characterData.getCharacters().values()) {
-                if (profile.getDisplayName().equalsIgnoreCase(nameOrUUID)) {
-                    return profile.getId();
+            for (Map.Entry<UUID, String> entry : characterData.getCharacterIds().entrySet()) {
+                if (entry.getValue().equalsIgnoreCase(nameOrUUID)) {
+                    return entry.getKey();
                 }
             }
             return null;
@@ -504,7 +504,7 @@ public class CommandRegistry {
             return;
         }
 
-        if (characterData.getCharacters().size() >= Config.MAX_CHARACTERS_PER_PLAYER.get()) {
+        if (characterData.getCharacterCount() >= Config.MAX_CHARACTERS_PER_PLAYER.get()) {
             sendError(player, Component.translatable("command.persona.error.max_characters", Config.MAX_CHARACTERS_PER_PLAYER.get()), fromGui);
             if (fromGui) PersonaNetworking.sendCreationResponseToPlayer(player, false, "command.persona.error.max_characters", String.valueOf(Config.MAX_CHARACTERS_PER_PLAYER.get()));
             return;
@@ -684,9 +684,9 @@ public class CommandRegistry {
             foundCharacterId = UUID.fromString(nameOrUUID);
         } catch (IllegalArgumentException e) {
             // Not a UUID, try to find by display name
-            for (CharacterProfile profile : characterData.getCharacters().values()) {
-                if (profile.getDisplayName().equalsIgnoreCase(nameOrUUID)) {
-                    foundCharacterId = profile.getId();
+            for (Map.Entry<UUID, String> entry : characterData.getCharacterIds().entrySet()) {
+                if (entry.getValue().equalsIgnoreCase(nameOrUUID)) {
+                    foundCharacterId = entry.getKey();
                     break;
                 }
             }
@@ -762,6 +762,9 @@ public class CommandRegistry {
         GlobalCharacterRegistry.unregisterCharacter(activeCharacterId, oldName);
         activeProfile.setDisplayName(newName);
         GlobalCharacterRegistry.registerCharacter(activeCharacterId, player.getUUID(), newName);
+        
+        // Update the character data and save to file storage
+        characterData.updateCharacterDisplayName(activeCharacterId, newName);
         
         sendSuccess(player, Component.translatable("command.persona.success.renamed", newName), fromGui);
     }

@@ -43,7 +43,7 @@ public class CharacterSyncManager {
         
         if (minecraft.player != null) {
             PlayerCharacterData data = minecraft.player.getData(PlayerCharacterCapability.CHARACTER_DATA);
-            if (data != null && !data.getCharacters().isEmpty()) {
+            if (data != null && data.getCharacterCount() > 0) {
                 // Sync successful
                 syncAttempts = 0;
                 onSyncComplete.accept(true);

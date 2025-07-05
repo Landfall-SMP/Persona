@@ -147,16 +147,17 @@ public final class CharacterUtils {
             }
 
             // Find character by name (case-insensitive)
-            Optional<CharacterProfile> profileOpt = characterData.getCharacters().values().stream()
-                .filter(profile -> profile.getDisplayName().equalsIgnoreCase(characterName.trim()))
+            Optional<UUID> characterIdOpt = characterData.getCharacterIds().entrySet().stream()
+                .filter(entry -> entry.getValue().equalsIgnoreCase(characterName.trim()))
+                .map(Map.Entry::getKey)
                 .findFirst();
-
-            if (profileOpt.isEmpty()) {
+            
+            if (characterIdOpt.isEmpty()) {
                 LOGGER.warn("[CharacterUtils] Character '{}' not found for player {}", characterName, player.getName().getString());
                 return false;
             }
-
-            return setCharacterDeceased(player, profileOpt.get().getId(), deceased, delayAutoSwitch);
+            
+            return setCharacterDeceased(player, characterIdOpt.get(), deceased, delayAutoSwitch);
             
         } catch (Exception e) {
             LOGGER.error("[CharacterUtils] Error setting deceased status by name for character '{}' (player: {}): {}", 
@@ -303,14 +304,18 @@ public final class CharacterUtils {
             UUID oldActiveCharacterId = characterData.getActiveCharacterId();
             
             // Find another non-deceased character to switch to
-            Optional<CharacterProfile> newActiveProfile = characterData.getCharacters().values().stream()
+            Optional<UUID> newActiveProfileId = characterData.getCharacterIds().keySet().stream()
                 .filter(Objects::nonNull)
-                .filter(p -> !p.getId().equals(deceasedProfile.getId()) && !p.isDeceased())
+                .filter(id -> !id.equals(deceasedProfile.getId()))
+                .filter(id -> {
+                    CharacterProfile profile = characterData.getCharacter(id);
+                    return profile != null && !profile.isDeceased();
+                })
                 .findFirst();
 
-            if (newActiveProfile.isPresent()) {
+            if (newActiveProfileId.isPresent()) {
                 // Switch to the new character
-                CharacterProfile newProfile = newActiveProfile.get();
+                CharacterProfile newProfile = characterData.getCharacter(newActiveProfileId.get());
                 characterData.setActiveCharacterId(newProfile.getId());
                 
                 // Send message to player

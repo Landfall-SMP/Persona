@@ -16,6 +16,8 @@ import world.landfall.persona.Persona;
 import world.landfall.persona.command.CommandRegistry;
 import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.data.PlayerCharacterCapability;
+import world.landfall.persona.data.CharacterProfile;
+import world.landfall.persona.data.CharacterFileStorage;
 import world.landfall.persona.config.Config;
 import world.landfall.persona.config.ClientSyncedConfig;
 import net.minecraft.nbt.CompoundTag;
@@ -23,6 +25,7 @@ import net.minecraft.nbt.CompoundTag;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @EventBusSubscriber(modid = Persona.MODID, bus = EventBusSubscriber.Bus.MOD)
 public class PersonaNetworking {
@@ -143,13 +146,36 @@ public class PersonaNetworking {
         }
     }
     
-    public static record SyncToClientPayload(PlayerCharacterData data) implements CustomPacketPayload {
+    public static record SyncToClientPayload(PlayerCharacterData data, Map<UUID, CharacterProfile> characters) implements CustomPacketPayload {
         public SyncToClientPayload(RegistryFriendlyByteBuf buf) {
-            this(PlayerCharacterData.deserialize(buf.readNbt()));
+            this(PlayerCharacterData.deserialize(buf.readNbt()), readCharacterMap(buf));
+        }
+        
+        private static Map<UUID, CharacterProfile> readCharacterMap(RegistryFriendlyByteBuf buf) {
+            int size = buf.readVarInt();
+            Map<UUID, CharacterProfile> characters = new HashMap<>(size);
+            
+            for (int i = 0; i < size; i++) {
+                UUID characterId = buf.readUUID();
+                CompoundTag characterData = buf.readNbt();
+                if (characterData != null) {
+                    CharacterProfile character = CharacterProfile.deserialize(characterData);
+                    characters.put(characterId, character);
+                }
+            }
+            
+            return characters;
         }
         
         public void write(FriendlyByteBuf buf) { 
             buf.writeNbt(data.serialize());
+            
+            // Write character profiles
+            buf.writeVarInt(characters.size());
+            characters.forEach((id, character) -> {
+                buf.writeUUID(id);
+                buf.writeNbt(character.serialize());
+            });
         }
         
         @Override
@@ -166,6 +192,8 @@ public class PersonaNetworking {
                     PlayerCharacterData currentData = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
                     if (currentData != null) {
                         currentData.copyFrom(payload.data());
+                        // Cache the character profiles on the client side
+                        payload.characters().values().forEach(currentData::cacheCharacter);
                     }
                 });
             }
@@ -335,7 +363,17 @@ public class PersonaNetworking {
             Persona.LOGGER.error("[Persona] Cannot send packet, network not initialized");
             return;
         }
-        PacketDistributor.sendToPlayer(player, new SyncToClientPayload(data));
+        
+        // Load all character profiles for this player
+        Map<UUID, CharacterProfile> characters = new HashMap<>();
+        for (UUID characterId : data.getCharacterIds().keySet()) {
+            CharacterProfile character = CharacterFileStorage.loadCharacter(characterId);
+            if (character != null) {
+                characters.put(characterId, character);
+            }
+        }
+        
+        PacketDistributor.sendToPlayer(player, new SyncToClientPayload(data, characters));
     }
     
     public static void sendToServer(PlayerCharacterData data) {
