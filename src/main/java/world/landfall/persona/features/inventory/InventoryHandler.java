@@ -112,6 +112,8 @@ public class InventoryHandler {
                     if (fromProfile != null) {
                         CompoundTag inventoryTag = saveInventory(player);
                         fromProfile.setModData(INVENTORY_KEY, inventoryTag);
+                        // Save the character to file to persist the inventory data
+                        world.landfall.persona.data.CharacterFileStorage.saveCharacter(fromProfile);
                         LOGGER.debug("[InventoryHandler] Saved inventory for character {} ({} items). Player: {}",
                             fromCharacterId, inventoryTag.getList("Items", 10).size(), playerId);
                     } else {
@@ -274,7 +276,7 @@ public class InventoryHandler {
         return true;
     }
 
-    private static CompoundTag saveInventory(ServerPlayer player) {
+    public static CompoundTag saveInventory(ServerPlayer player) {
         CompoundTag inventoryTag = new CompoundTag();
         ListTag itemsList = new ListTag();
         int itemCount = 0;

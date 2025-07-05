@@ -82,6 +82,8 @@ public class LocationHandler {
                 CharacterProfile fromProfile = characterData.getCharacter(fromCharacterId);
                 if (fromProfile != null) {
                     fromProfile.setModData(LOCATION_KEY, saveLocation(player));
+                    // Save the character to file to persist the location data
+                    world.landfall.persona.data.CharacterFileStorage.saveCharacter(fromProfile);
                     LOGGER.debug("[LocationHandler] Saved location for character {}. Player: {}", fromCharacterId, playerId);
                 } else {
                     LOGGER.warn("[LocationHandler] 'From' CharacterProfile is null for character: {}. Cannot save location.", fromCharacterId);
@@ -143,7 +145,7 @@ public class LocationHandler {
         }
     }
 
-    private static CompoundTag saveLocation(ServerPlayer player) {
+    public static CompoundTag saveLocation(ServerPlayer player) {
         CompoundTag locationTag = new CompoundTag();
         locationTag.putDouble("x", player.getX());
         locationTag.putDouble("y", player.getY());

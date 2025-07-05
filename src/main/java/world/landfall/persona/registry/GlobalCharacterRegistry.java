@@ -9,6 +9,7 @@ import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import world.landfall.persona.Persona;
 import world.landfall.persona.data.PlayerCharacterData;
 import world.landfall.persona.data.PlayerCharacterCapability;
+import world.landfall.persona.data.CharacterProfile;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -58,6 +59,9 @@ public class GlobalCharacterRegistry {
     public static void onServerStopping(ServerStoppingEvent event) {
         registryLock.writeLock().lock();
         try {
+            // Save all active character data before server shutdown
+            saveAllActiveCharacterData(event.getServer());
+            
             RegistryPersistence.saveRegistry(characterToPlayerMap, characterNameMap);
             Persona.LOGGER.info("[Persona] Global Character Registry saved to disk.");
         } finally {
@@ -221,7 +225,10 @@ public class GlobalCharacterRegistry {
     
     @SubscribeEvent
     public static void onPlayerLogout(final PlayerEvent.PlayerLoggedOutEvent event) {
-        // Nothing to do on logout - characters should persist in the registry
+        if (event.getEntity() instanceof ServerPlayer player) {
+            // Save active character data before player disconnects
+            saveActiveCharacterData(player);
+        }
     }
     
     /**
@@ -298,6 +305,79 @@ public class GlobalCharacterRegistry {
             return new ConcurrentHashMap<>(characterNameMap);
         } finally {
             registryLock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Saves all active character data for all online players.
+     * This ensures that inventory and location data is not lost on server restart.
+     */
+    private static void saveAllActiveCharacterData(net.minecraft.server.MinecraftServer server) {
+        try {
+            int savedCount = 0;
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                if (saveActiveCharacterData(player)) {
+                    savedCount++;
+                }
+            }
+            Persona.LOGGER.info("[Persona] Saved active character data for {} players before server shutdown.", savedCount);
+        } catch (Exception e) {
+            Persona.LOGGER.error("[Persona] Error saving active character data during server shutdown", e);
+        }
+    }
+
+    /**
+     * Saves the active character data for a specific player.
+     * @param player The player whose active character data should be saved
+     * @return true if data was saved successfully, false otherwise
+     */
+    private static boolean saveActiveCharacterData(ServerPlayer player) {
+        try {
+            PlayerCharacterData data = player.getData(PlayerCharacterCapability.CHARACTER_DATA);
+            if (data == null) {
+                return false;
+            }
+
+            UUID activeCharacterId = data.getActiveCharacterId();
+            if (activeCharacterId == null) {
+                return false;
+            }
+
+            CharacterProfile activeProfile = data.getCharacter(activeCharacterId);
+            if (activeProfile == null) {
+                return false;
+            }
+
+                         // Save current inventory data
+             if (world.landfall.persona.config.Config.ENABLE_INVENTORY_SYSTEM.get()) {
+                 try {
+                     net.minecraft.nbt.CompoundTag inventoryTag = world.landfall.persona.features.inventory.InventoryHandler.saveInventory(player);
+                     activeProfile.setModData(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(Persona.MODID, "inventory"), inventoryTag);
+                 } catch (Exception e) {
+                     Persona.LOGGER.error("[Persona] Failed to save inventory data for player {}", player.getName().getString(), e);
+                 }
+             }
+
+             // Save current location data
+             if (world.landfall.persona.config.Config.ENABLE_LOCATION_SYSTEM.get()) {
+                 try {
+                     net.minecraft.nbt.CompoundTag locationTag = world.landfall.persona.features.location.LocationHandler.saveLocation(player);
+                     activeProfile.setModData(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(Persona.MODID, "location"), locationTag);
+                 } catch (Exception e) {
+                     Persona.LOGGER.error("[Persona] Failed to save location data for player {}", player.getName().getString(), e);
+                 }
+             }
+
+            // Save the character to file
+            world.landfall.persona.data.CharacterFileStorage.saveCharacter(activeProfile);
+            
+            Persona.LOGGER.debug("[Persona] Saved active character data for player {} (character: {})", 
+                player.getName().getString(), activeProfile.getDisplayName());
+            return true;
+
+        } catch (Exception e) {
+            Persona.LOGGER.error("[Persona] Error saving active character data for player {}", player.getName().getString(), e);
+            return false;
         }
     }
 } 
